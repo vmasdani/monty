@@ -3,15 +3,22 @@
   <meta charset="UTF-8">
   <title>Main</title>
   <script src="main.js"></script>
+  <script src="https://apis.google.com/js/platform.js" async defer></script>
+  <meta name="google-signin-client_id" content="354857779698-4l5m51k5gcih8h5e2733s10hm504kk2u.apps.googleusercontent.com">
 </head>
 
 <body>
+  <div class="g-signin2" data-onsuccess="onSignIn"></div>
   <div id="myapp"></div>
   <script>
   var app = Elm.Main.init({
     node: document.getElementById('myapp'),
     flags: Date.now()
   });
+
+  function onSignIn(googleUser) {
+    console.log('Google user:', googleUser)
+  }
   </script>
 </body>
 </html>

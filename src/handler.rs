@@ -1,4 +1,4 @@
-use actix_web::{get, post, web, HttpResponse, Responder};
+use actix_web::{client::Client, get, post, web, HttpResponse, Responder};
 use diesel::{r2d2::ConnectionManager, SqliteConnection};
 
 type DbPool = diesel::r2d2::Pool<ConnectionManager<SqliteConnection>>;
@@ -10,6 +10,8 @@ use diesel::prelude::*;
 
 #[get("/emails")]
 async fn get_emails(pool: web::Data<DbPool>) -> impl Responder {
+    println!("Getting emails!");
+
     match pool.get() {
         Ok(conn) => {
             use crate::schema::emails::dsl::*;
@@ -62,7 +64,7 @@ async fn get_email_subscriptions(
 
             match subscriptions_res {
                 Ok(subscriptions_list) => HttpResponse::Ok().json(&subscriptions_list),
-                _ => HttpResponse::InternalServerError().body("Getting subscriptions list error!")
+                _ => HttpResponse::InternalServerError().body("Getting subscriptions list error!"),
             }
         }
         _ => HttpResponse::InternalServerError().body("Getting connection error!"),
@@ -155,5 +157,34 @@ async fn post_subscription(
             }
         }
         _ => HttpResponse::InternalServerError().body("Error getting pool"),
+    }
+}
+
+#[derive(Deserialize)]
+struct IdTokenBody {
+    id_token: String,
+}
+
+#[post("/google-login-verify")]
+async fn google_login_verify(id_token_body: web::Json<IdTokenBody>) -> impl Responder {
+    println!("Verifying login!");
+
+    let url = format!(
+        "https://oauth2.googleapis.com/tokeninfo?id_token={}",
+        id_token_body.id_token
+    );
+    #[derive(Serialize, Deserialize, Debug)]
+    pub struct OauthResponseBody {
+        email: String,
+    }
+
+    match reqwest::get(url.as_str()).await {
+        Ok(resp) => match resp.json::<OauthResponseBody>().await {
+            Ok(oauth_response) => HttpResponse::Ok().json(OauthResponseBody {
+                email: oauth_response.email,
+            }),
+            _ => HttpResponse::InternalServerError().body("Error getting email!"),
+        },
+        Err(e) => HttpResponse::InternalServerError().body(format!("{:?}", e)),
     }
 }

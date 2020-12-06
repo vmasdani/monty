@@ -70,6 +70,9 @@ async fn main() -> io::Result<()> {
             .service(home)
             // .service(index)
 
+            // Logins
+            .service(google_login_verify)
+
             // Emails
             .service(get_emails)
             .service(get_email)
@@ -80,7 +83,6 @@ async fn main() -> io::Result<()> {
             .service(get_subscriptions)
             .service(get_subscription)
             .service(post_subscription)
-
 
             // .route("/", web::get().to(home))
             // .route("/{name}", web::get().to(index))
