@@ -9,6 +9,7 @@ extern crate diesel_migrations;
 
 pub mod handler;
 pub mod model;
+pub mod populate;
 pub mod schema;
 
 use std::io;
@@ -57,12 +58,26 @@ async fn main() -> io::Result<()> {
 
     let pool_clone = pool.clone();
 
+    println!("Running embedded migration...");
+    
     match pool_clone.get() {
         Ok(conn) => {
             embedded_migrations::run(&conn).expect("Failed running embedded migration!");
         }
         _ => {
             println!("Failed running embedded migration!");
+        }
+    }
+
+    // Population
+    println!("Running population...");
+    
+    match pool.clone().get() {
+        Ok(pool) => {
+            populate::populate(pool);
+        }
+        _ => {
+            println!("Failed ppoulating");
         }
     }
 
@@ -75,6 +90,7 @@ async fn main() -> io::Result<()> {
             .service(google_login_verify)
             // Emails
             .service(get_emails)
+            .service(get_email_by_name)
             .service(get_email)
             .service(post_email)
             .service(get_email_subscriptions)

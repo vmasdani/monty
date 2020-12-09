@@ -5148,24 +5148,390 @@ var $elm$core$Platform$Cmd$batch = _Platform_batch;
 var $elm$core$Platform$Cmd$none = $elm$core$Platform$Cmd$batch(_List_Nil);
 var $author$project$Main$init = function (currentTime) {
 	return _Utils_Tuple2(
-		{currentTime: currentTime},
+		{currentTime: currentTime, user: $elm$core$Maybe$Nothing},
 		$elm$core$Platform$Cmd$none);
 };
 var $elm$json$Json$Decode$int = _Json_decodeInt;
-var $elm$core$Platform$Sub$batch = _Platform_batch;
-var $elm$core$Platform$Sub$none = $elm$core$Platform$Sub$batch(_List_Nil);
-var $author$project$Main$subscriptions = function (_v0) {
-	return $elm$core$Platform$Sub$none;
+var $author$project$Main$LoggedIn = function (a) {
+	return {$: 'LoggedIn', a: a};
 };
-var $author$project$Main$update = F2(
-	function (_v0, model) {
-		return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
+var $author$project$Main$SignedOut = function (a) {
+	return {$: 'SignedOut', a: a};
+};
+var $elm$core$Platform$Sub$batch = _Platform_batch;
+var $elm$json$Json$Decode$string = _Json_decodeString;
+var $author$project$Main$loggedIn = _Platform_incomingPort('loggedIn', $elm$json$Json$Decode$string);
+var $elm$json$Json$Decode$null = _Json_decodeNull;
+var $author$project$Main$signedOut = _Platform_incomingPort(
+	'signedOut',
+	$elm$json$Json$Decode$null(_Utils_Tuple0));
+var $author$project$Main$subscriptions = function (_v0) {
+	return $elm$core$Platform$Sub$batch(
+		_List_fromArray(
+			[
+				$author$project$Main$loggedIn($author$project$Main$LoggedIn),
+				$author$project$Main$signedOut($author$project$Main$SignedOut)
+			]));
+};
+var $elm$json$Json$Decode$decodeString = _Json_runOnString;
+var $elm$core$Debug$log = _Debug_log;
+var $elm$json$Json$Encode$null = _Json_encodeNull;
+var $author$project$Main$signOut = _Platform_outgoingPort(
+	'signOut',
+	function ($) {
+		return $elm$json$Json$Encode$null;
 	});
+var $elm$core$Debug$toString = _Debug_toString;
+var $author$project$Main$UserInfo = F3(
+	function (fullName, imageUrl, email) {
+		return {email: email, fullName: fullName, imageUrl: imageUrl};
+	});
+var $NoRedInk$elm_json_decode_pipeline$Json$Decode$Pipeline$custom = $elm$json$Json$Decode$map2($elm$core$Basics$apR);
+var $elm$json$Json$Decode$field = _Json_decodeField;
+var $NoRedInk$elm_json_decode_pipeline$Json$Decode$Pipeline$required = F3(
+	function (key, valDecoder, decoder) {
+		return A2(
+			$NoRedInk$elm_json_decode_pipeline$Json$Decode$Pipeline$custom,
+			A2($elm$json$Json$Decode$field, key, valDecoder),
+			decoder);
+	});
+var $author$project$Main$userInfoDecoder = A3(
+	$NoRedInk$elm_json_decode_pipeline$Json$Decode$Pipeline$required,
+	'du',
+	$elm$json$Json$Decode$string,
+	A3(
+		$NoRedInk$elm_json_decode_pipeline$Json$Decode$Pipeline$required,
+		'iK',
+		$elm$json$Json$Decode$string,
+		A3(
+			$NoRedInk$elm_json_decode_pipeline$Json$Decode$Pipeline$required,
+			'Ad',
+			$elm$json$Json$Decode$string,
+			$elm$json$Json$Decode$succeed($author$project$Main$UserInfo))));
+var $author$project$Main$update = F2(
+	function (msg, model) {
+		switch (msg.$) {
+			case 'NoOp':
+				return _Utils_Tuple2(model, $elm$core$Platform$Cmd$none);
+			case 'LoggedIn':
+				var loginInfo = msg.a;
+				var decodedUser = A2($elm$json$Json$Decode$decodeString, $author$project$Main$userInfoDecoder, loginInfo);
+				var userInfo = function () {
+					if (decodedUser.$ === 'Ok') {
+						var user = decodedUser.a;
+						return $elm$core$Maybe$Just(user);
+					} else {
+						return $elm$core$Maybe$Nothing;
+					}
+				}();
+				return $elm$core$Debug$log(
+					$elm$core$Debug$toString(decodedUser))(
+					_Utils_Tuple2(
+						_Utils_update(
+							model,
+							{user: userInfo}),
+						$elm$core$Platform$Cmd$none));
+			case 'SignOut':
+				return _Utils_Tuple2(
+					model,
+					$author$project$Main$signOut(_Utils_Tuple0));
+			default:
+				return _Utils_Tuple2(
+					_Utils_update(
+						model,
+						{user: $elm$core$Maybe$Nothing}),
+					$elm$core$Platform$Cmd$none);
+		}
+	});
+var $author$project$Main$SignOut = {$: 'SignOut'};
+var $elm$virtual_dom$VirtualDom$attribute = F2(
+	function (key, value) {
+		return A2(
+			_VirtualDom_attribute,
+			_VirtualDom_noOnOrFormAction(key),
+			_VirtualDom_noJavaScriptOrHtmlUri(value));
+	});
+var $elm$html$Html$Attributes$attribute = $elm$virtual_dom$VirtualDom$attribute;
+var $elm$html$Html$button = _VirtualDom_node('button');
+var $elm$json$Json$Encode$string = _Json_wrap;
+var $elm$html$Html$Attributes$stringProperty = F2(
+	function (key, string) {
+		return A2(
+			_VirtualDom_property,
+			key,
+			$elm$json$Json$Encode$string(string));
+	});
+var $elm$html$Html$Attributes$class = $elm$html$Html$Attributes$stringProperty('className');
+var $elm$html$Html$div = _VirtualDom_node('div');
+var $elm$html$Html$h2 = _VirtualDom_node('h2');
+var $elm$html$Html$h3 = _VirtualDom_node('h3');
+var $elm$html$Html$h4 = _VirtualDom_node('h4');
+var $elm$html$Html$h5 = _VirtualDom_node('h5');
+var $elm$html$Html$img = _VirtualDom_node('img');
+var $elm$virtual_dom$VirtualDom$Normal = function (a) {
+	return {$: 'Normal', a: a};
+};
+var $elm$virtual_dom$VirtualDom$on = _VirtualDom_on;
+var $elm$html$Html$Events$on = F2(
+	function (event, decoder) {
+		return A2(
+			$elm$virtual_dom$VirtualDom$on,
+			event,
+			$elm$virtual_dom$VirtualDom$Normal(decoder));
+	});
+var $elm$html$Html$Events$onClick = function (msg) {
+	return A2(
+		$elm$html$Html$Events$on,
+		'click',
+		$elm$json$Json$Decode$succeed(msg));
+};
+var $elm$html$Html$Attributes$src = function (url) {
+	return A2(
+		$elm$html$Html$Attributes$stringProperty,
+		'src',
+		_VirtualDom_noJavaScriptOrHtmlUri(url));
+};
+var $elm$html$Html$table = _VirtualDom_node('table');
+var $elm$html$Html$tbody = _VirtualDom_node('tbody');
+var $elm$html$Html$td = _VirtualDom_node('td');
 var $elm$virtual_dom$VirtualDom$text = _VirtualDom_text;
 var $elm$html$Html$text = $elm$virtual_dom$VirtualDom$text;
+var $elm$html$Html$th = _VirtualDom_node('th');
+var $elm$html$Html$thead = _VirtualDom_node('thead');
+var $elm$html$Html$tr = _VirtualDom_node('tr');
 var $author$project$Main$view = function (model) {
-	return $elm$html$Html$text(
-		$elm$core$String$fromInt(model.currentTime));
+	return A2(
+		$elm$html$Html$div,
+		_List_fromArray(
+			[
+				$elm$html$Html$Attributes$class('container bg-light shadow p-2 d-flex align-items-center flex-column justify-items-center')
+			]),
+		_List_fromArray(
+			[
+				A2(
+				$elm$html$Html$div,
+				_List_Nil,
+				_List_fromArray(
+					[
+						A2(
+						$elm$html$Html$h2,
+						_List_Nil,
+						_List_fromArray(
+							[
+								$elm$html$Html$text('Monty')
+							]))
+					])),
+				A2(
+				$elm$html$Html$div,
+				_List_fromArray(
+					[
+						$elm$html$Html$Attributes$class('fst-italic')
+					]),
+				_List_fromArray(
+					[
+						$elm$html$Html$text('Monthly subscription price calculator')
+					])),
+				A2(
+				$elm$html$Html$div,
+				_List_fromArray(
+					[
+						$elm$html$Html$Attributes$class('d-flex my-2')
+					]),
+				_List_fromArray(
+					[
+						A2(
+						$elm$html$Html$div,
+						_List_fromArray(
+							[
+								$elm$html$Html$Attributes$class('g-signin2'),
+								A2($elm$html$Html$Attributes$attribute, 'data-onsuccess', 'onSignIn')
+							]),
+						_List_Nil),
+						A2(
+						$elm$html$Html$button,
+						_List_fromArray(
+							[
+								$elm$html$Html$Events$onClick($author$project$Main$SignOut),
+								$elm$html$Html$Attributes$class('btn btn-danger')
+							]),
+						_List_fromArray(
+							[
+								$elm$html$Html$text('Logout')
+							]))
+					])),
+				function () {
+				var _v0 = model.user;
+				if (_v0.$ === 'Just') {
+					var user = _v0.a;
+					return A2(
+						$elm$html$Html$div,
+						_List_fromArray(
+							[
+								$elm$html$Html$Attributes$class('d-flex flex-column align-items-center justify-content-center')
+							]),
+						_List_fromArray(
+							[
+								A2(
+								$elm$html$Html$h5,
+								_List_Nil,
+								_List_fromArray(
+									[
+										$elm$html$Html$text('Hello, ' + (user.fullName + ('! (' + (user.email + ')'))))
+									])),
+								A2(
+								$elm$html$Html$div,
+								_List_Nil,
+								_List_fromArray(
+									[
+										A2(
+										$elm$html$Html$img,
+										_List_fromArray(
+											[
+												$elm$html$Html$Attributes$class('rounded-pill'),
+												$elm$html$Html$Attributes$src(user.imageUrl)
+											]),
+										_List_Nil)
+									])),
+								A2(
+								$elm$html$Html$div,
+								_List_fromArray(
+									[
+										$elm$html$Html$Attributes$class('my-2')
+									]),
+								_List_fromArray(
+									[
+										A2(
+										$elm$html$Html$table,
+										_List_fromArray(
+											[
+												$elm$html$Html$Attributes$class('table rounded rounded-lg table-sm table-bordered border-info shadow')
+											]),
+										_List_fromArray(
+											[
+												A2(
+												$elm$html$Html$thead,
+												_List_Nil,
+												_List_fromArray(
+													[
+														A2(
+														$elm$html$Html$tr,
+														_List_fromArray(
+															[
+																$elm$html$Html$Attributes$class('table-primary')
+															]),
+														_List_fromArray(
+															[
+																A2(
+																$elm$html$Html$th,
+																_List_Nil,
+																_List_fromArray(
+																	[
+																		$elm$html$Html$text('Name')
+																	])),
+																A2(
+																$elm$html$Html$th,
+																_List_Nil,
+																_List_fromArray(
+																	[
+																		$elm$html$Html$text('Price ()')
+																	])),
+																A2(
+																$elm$html$Html$th,
+																_List_Nil,
+																_List_fromArray(
+																	[
+																		$elm$html$Html$text('Interval')
+																	]))
+															]))
+													])),
+												A2(
+												$elm$html$Html$tbody,
+												_List_Nil,
+												_List_fromArray(
+													[
+														A2(
+														$elm$html$Html$tr,
+														_List_Nil,
+														_List_fromArray(
+															[
+																A2(
+																$elm$html$Html$td,
+																_List_Nil,
+																_List_fromArray(
+																	[
+																		$elm$html$Html$text('Name')
+																	])),
+																A2(
+																$elm$html$Html$td,
+																_List_Nil,
+																_List_fromArray(
+																	[
+																		$elm$html$Html$text('Price')
+																	])),
+																A2(
+																$elm$html$Html$td,
+																_List_Nil,
+																_List_fromArray(
+																	[
+																		$elm$html$Html$text('Interval')
+																	]))
+															]))
+													]))
+											]))
+									])),
+								A2(
+								$elm$html$Html$div,
+								_List_fromArray(
+									[
+										$elm$html$Html$Attributes$class('text-center')
+									]),
+								_List_fromArray(
+									[
+										A2(
+										$elm$html$Html$h4,
+										_List_Nil,
+										_List_fromArray(
+											[
+												$elm$html$Html$text('You pay about:')
+											])),
+										A2(
+										$elm$html$Html$h3,
+										_List_fromArray(
+											[
+												$elm$html$Html$Attributes$class('text-success')
+											]),
+										_List_fromArray(
+											[
+												$elm$html$Html$text('5.00 USD monthly')
+											])),
+										A2(
+										$elm$html$Html$h3,
+										_List_fromArray(
+											[
+												$elm$html$Html$Attributes$class('text-success')
+											]),
+										_List_fromArray(
+											[
+												$elm$html$Html$text('60.00 USD annualy')
+											]))
+									]))
+							]));
+				} else {
+					return A2($elm$html$Html$div, _List_Nil, _List_Nil);
+				}
+			}(),
+				A2(
+				$elm$html$Html$div,
+				_List_fromArray(
+					[
+						$elm$html$Html$Attributes$class('d-flex justify-content-center text-center bg-primary rounded fw-bold p-2 rounded-lg text-white')
+					]),
+				_List_fromArray(
+					[
+						$elm$html$Html$text(
+						$elm$core$Debug$toString(model.user))
+					]))
+			]));
 };
 var $author$project$Main$main = $elm$browser$Browser$element(
 	{init: $author$project$Main$init, subscriptions: $author$project$Main$subscriptions, update: $author$project$Main$update, view: $author$project$Main$view});

@@ -26,6 +26,40 @@ async fn get_emails(pool: web::Data<DbPool>) -> impl Responder {
     }
 }
 
+#[derive(Deserialize)]
+struct EmailNameInfo {
+    name: String,
+}
+
+#[get("/emails/byname")]
+async fn get_email_by_name(
+    pool: web::Data<DbPool>,
+    email_name: web::Query<EmailNameInfo>,
+) -> impl Responder {
+    println!("Getting email by name! {}", email_name.name);
+
+    match pool.get() {
+        Ok(conn) => {
+            use crate::schema::emails::dsl::{email, emails};
+
+            let email_clone = email_name.name.clone();
+
+            let emails_res = web::block(move || {
+                emails
+                    .filter(email.eq(email_clone))
+                    .first::<Email>(&conn)
+            })
+            .await;
+            match emails_res {
+                Ok(email_get) => HttpResponse::Ok().json(&email_get),
+                _ => HttpResponse::InternalServerError()
+                    .body(format!("Error getting email! {}", email_name.name)),
+            }
+        }
+        _ => HttpResponse::InternalServerError().body("Getting connection error!"),
+    }
+}
+
 #[get("/emails/{email_id}")]
 async fn get_email(pool: web::Data<DbPool>, email_id: web::Path<i32>) -> impl Responder {
     match pool.get() {
