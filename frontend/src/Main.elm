@@ -100,6 +100,7 @@ type alias UserInfo =
     { fullName : String
     , imageUrl : String
     , email : String
+    , idToken : String
     }
      
 initialUserInfo : UserInfo
@@ -107,6 +108,7 @@ initialUserInfo =
   { fullName = ""
   , imageUrl = ""
   , email = ""
+  , idToken = ""
   }
 
 userInfoDecoder : Decoder UserInfo
@@ -115,6 +117,7 @@ userInfoDecoder =
     |> Pipeline.required "Ad" Decode.string
     |> Pipeline.required "iK" Decode.string
     |> Pipeline.required "du" Decode.string 
+    |> Pipeline.required "idToken" Decode.string
 
 type alias GoogleUser =
     { user : UserInfo
