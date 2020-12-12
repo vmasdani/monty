@@ -3,7 +3,7 @@ use diesel::{r2d2::ConnectionManager, SqliteConnection};
 
 type DbPool = diesel::r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
-use crate::model::*;
+use crate::{model::*, schema};
 use diesel::prelude::*;
 
 // EMAILS
@@ -44,12 +44,9 @@ async fn get_email_by_name(
 
             let email_clone = email_name.name.clone();
 
-            let emails_res = web::block(move || {
-                emails
-                    .filter(email.eq(email_clone))
-                    .first::<Email>(&conn)
-            })
-            .await;
+            let emails_res =
+                web::block(move || emails.filter(email.eq(email_clone)).first::<Email>(&conn))
+                    .await;
             match emails_res {
                 Ok(email_get) => HttpResponse::Ok().json(&email_get),
                 _ => HttpResponse::InternalServerError()
@@ -105,6 +102,32 @@ async fn get_email_subscriptions(
     }
 }
 
+#[get("/emails/byname/{email_name}/subscriptions")]
+async fn get_email_by_name_subscriptions(
+    pool: web::Data<DbPool>,
+    email_name: web::Path<String>,
+) -> impl Responder {
+    match pool.get() {
+        Ok(conn) => {
+            let subscriptions_res = web::block(move || {
+                use crate::schema::emails::dsl::{email, emails, id};
+
+                let email_found = emails
+                    .filter(email.eq(email_name.into_inner()))
+                    .first::<Email>(&conn)?;
+                Subscription::belonging_to(&email_found).load::<Subscription>(&conn)
+            })
+            .await;
+
+            match subscriptions_res {
+                Ok(subscriptions_list) => HttpResponse::Ok().json(&subscriptions_list),
+                _ => HttpResponse::Ok().json(&vec![] as &Vec<Subscription>),
+            }
+        }
+        _ => HttpResponse::InternalServerError().body("Getting connection error!"),
+    }
+}
+
 #[post("/emails")]
 async fn post_email(pool: web::Data<DbPool>, email_body: web::Json<Email>) -> impl Responder {
     match pool.get() {
@@ -119,6 +142,56 @@ async fn post_email(pool: web::Data<DbPool>, email_body: web::Json<Email>) -> im
 
             match res {
                 Ok(_) => HttpResponse::Created().body("OK"),
+                _ => HttpResponse::InternalServerError().body("Error replacing email!"),
+            }
+        }
+        _ => HttpResponse::InternalServerError().body("Getting connection error!"),
+    }
+}
+
+#[derive(Deserialize)]
+struct EmailSaveBody {
+    name: String,
+}
+
+#[post("/emails/save")]
+async fn post_email_save(
+    pool: web::Data<DbPool>,
+    email_body: web::Json<EmailSaveBody>,
+) -> impl Responder {
+    match pool.get() {
+        Ok(conn) => {
+            let res = web::block(move || {
+                use crate::schema::emails::dsl::{email, emails, id};
+
+                let found_email = emails
+                    .filter(email.eq(email_body.name.clone()))
+                    .first::<Email>(&conn);
+
+                match &found_email {
+                    Ok(email_res) => {
+                        found_email
+                    },
+                    _ => {
+                        diesel::replace_into(emails)
+                            .values(&Email {
+                                id: None,
+                                email: Some(email_body.name.clone()),
+                                created_at: None,
+                                currency_id: None,
+                                currencie_id: None
+                            })
+                            .execute(&conn);
+
+                            
+                        emails.order(id.desc()).first::<Email>(&conn)
+                    }
+                }                
+            })
+            .await;
+
+            match res {
+                Ok(body) => HttpResponse::Created().json(body),
                 _ => HttpResponse::InternalServerError().body("Error replacing email!"),
             }
         }
@@ -220,5 +293,45 @@ async fn google_login_verify(id_token_body: web::Json<IdTokenBody>) -> impl Resp
             _ => HttpResponse::InternalServerError().body("Error getting email!"),
         },
         Err(e) => HttpResponse::InternalServerError().body(format!("{:?}", e)),
+    }
+}
+
+// Currencies
+#[get("/currencies")]
+async fn get_currencies(pool: web::Data<DbPool>) -> impl Responder {
+    match pool.get() {
+        Ok(conn) => {
+            let res = web::block(move || {
+                use crate::schema::currencies::dsl::*;
+
+                currencies.load::<Currencie>(&conn)
+            })
+            .await;
+            match res {
+                Ok(currencies) => HttpResponse::Ok().json(currencies),
+                _ => HttpResponse::InternalServerError().body("Error fetching currencies"),
+            }
+        }
+        _ => HttpResponse::InternalServerError().body("Error getting pool"),
+    }
+}
+
+// Intervals
+#[get("/intervals")]
+async fn get_intervals(pool: web::Data<DbPool>) -> impl Responder {
+    match pool.get() {
+        Ok(conn) => {
+            let res = web::block(move || {
+                use crate::schema::intervals::dsl::*;
+
+                intervals.load::<Interval>(&conn)
+            })
+            .await;
+            match res {
+                Ok(intervals) => HttpResponse::Ok().json(intervals),
+                _ => HttpResponse::InternalServerError().body("Error fetching intrevals"),
+            }
+        }
+        _ => HttpResponse::InternalServerError().body("Error getting pool"),
     }
 }

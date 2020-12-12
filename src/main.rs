@@ -14,7 +14,8 @@ pub mod schema;
 
 use std::io;
 
-use actix_web::{get, web, App, Error, HttpResponse, HttpServer, Responder};
+use actix_cors::Cors;
+use actix_web::{get, http, web, App, Error, HttpResponse, HttpServer, Responder};
 use diesel::{prelude::*, r2d2::ConnectionManager, SqliteConnection};
 use diesel_migrations::embed_migrations;
 use model::Email;
@@ -59,7 +60,6 @@ async fn main() -> io::Result<()> {
     let pool_clone = pool.clone();
 
     println!("Running embedded migration...");
-    
     match pool_clone.get() {
         Ok(conn) => {
             embedded_migrations::run(&conn).expect("Failed running embedded migration!");
@@ -71,7 +71,6 @@ async fn main() -> io::Result<()> {
 
     // Population
     println!("Running population...");
-    
     match pool.clone().get() {
         Ok(pool) => {
             populate::populate(pool);
@@ -84,8 +83,17 @@ async fn main() -> io::Result<()> {
     HttpServer::new(move || {
         App::new()
             .data(pool.clone())
+            .wrap(
+                Cors::default()
+                    .allow_any_origin()
+                    .allow_any_method()
+                    .allow_any_header()
+                    // .allowed_methods(vec!["GET", "POST"])
+                    //     .allowed_headers(vec![http::header::AUTHORIZATION, http::header::ACCEPT])
+                    //     .allowed_header(http::header::CONTENT_TYPE)
+                    .max_age(3600),
+            )
             .service(home)
-            // .service(index)
             // Logins
             .service(google_login_verify)
             // Emails
@@ -93,12 +101,18 @@ async fn main() -> io::Result<()> {
             .service(get_email_by_name)
             .service(get_email)
             .service(post_email)
+            .service(post_email_save)
             .service(get_email_subscriptions)
+            .service(get_email_by_name_subscriptions)
+            
             // Subscriptions
             .service(get_subscriptions)
             .service(get_subscription)
             .service(post_subscription)
-
+            // Currencies
+            .service(get_currencies)
+            // Intervals
+            .service(get_intervals)
         // .route("/", web::get().to(home))
         // .route("/{name}", web::get().to(index))
     })
