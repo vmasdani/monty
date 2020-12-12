@@ -253,14 +253,19 @@ update msg model =
 
     GotEmail res ->
       case res of
-        Ok email ->
+        Ok email -> 
           (Debug.log <| Debug.toString res)
-          ( model, Cmd.none )
+          fetchEmailSubscriptions { model | email = Just email }
 
         _ ->
           (Debug.log <| Debug.toString res)
           ( model, Cmd.none  )
 
+
+
+fetchEmailSubscriptions : Model -> ( Model, Cmd Msg )
+fetchEmailSubscriptions newModel =
+  ( newModel, Cmd.none )
 
 -- VIEW
 
