@@ -38,7 +38,7 @@ table! {
         id -> Nullable<Integer>,
         email_id -> Nullable<Integer>,
         name -> Nullable<Text>,
-        cost -> Nullable<Integer>,
+        cost -> Nullable<Float>,
         created_at -> Nullable<Timestamp>,
         interval_id -> Nullable<Integer>,
         interval_amount -> Nullable<Integer>,

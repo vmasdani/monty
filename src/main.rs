@@ -8,19 +8,31 @@ extern crate serde;
 extern crate diesel_migrations;
 
 pub mod handler;
+pub mod middleware;
 pub mod model;
 pub mod populate;
 pub mod schema;
-pub mod middleware;
 
-use std::{io, pin::Pin, task::{Context, Poll}};
+use std::{
+    io,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 use actix_cors::Cors;
 use actix_service::{Service, Transform};
-use actix_web::{App, Error, HttpResponse, HttpServer, Responder, dev::{ServiceRequest, ServiceResponse}, get, http, web};
+use actix_web::{
+    dev::{ServiceRequest, ServiceResponse},
+    error::{ErrorBadRequest, ErrorUnauthorized},
+    get, http, web, App, Error, HttpResponse, HttpServer, Responder,
+};
 use diesel::{prelude::*, r2d2::ConnectionManager, SqliteConnection};
 use diesel_migrations::embed_migrations;
-use futures::{Future, future::{Either, FutureExt, Ready, ok}};
+use futures::{
+    future::{ok, Either, FutureExt, Ready},
+    Future,
+};
+use http::StatusCode;
 use model::Email;
 
 type DbPool = diesel::r2d2::Pool<ConnectionManager<SqliteConnection>>;
@@ -51,8 +63,6 @@ async fn index(
 }
 
 embed_migrations!();
-
-
 
 #[actix_web::main]
 async fn main() -> io::Result<()> {
@@ -88,6 +98,54 @@ async fn main() -> io::Result<()> {
     HttpServer::new(move || {
         App::new()
             .data(pool.clone())
+            .wrap_fn(|req, srv| {
+                let auth_header = match req.headers().get("authorization") {
+                    Some(auth) => Some(String::from(auth.to_str().unwrap_or(""))),
+                    _ => None,
+                };
+                let fut = srv.call(req);
+
+                async move {
+                    let res: ServiceResponse<_> = fut.await?;
+                    // println!("{:?}", auth_header);
+
+                    match auth_header {
+                        Some(auth) => {
+                            // println!("Auth header: {:?}", auth);
+
+                            let url = format!(
+                                "https://oauth2.googleapis.com/tokeninfo?id_token={}",
+                                auth
+                            );
+
+                            let resp = reqwest::get(url.as_str()).await;
+
+                            let authorized =
+                                match resp {
+                                    Ok(resp_res) => {
+                                        if resp_res.status() == StatusCode::OK {
+                                            true
+                                        } else {
+                                            println!("Token invalid! {}",  resp_res.status());
+                                            false
+                                        }
+                                    }
+                                    _ => {
+                                        println!("Unauthorized!");
+                                        false
+                                    }
+                                };
+
+                            if authorized {
+                                Ok(res)
+                            } else {
+                                Err(ErrorUnauthorized("Unauthorized!"))
+                            }
+                        }
+                        _ => Err(ErrorBadRequest("No auth header present!")),
+                    }
+                }
+            })
             .wrap(
                 Cors::default()
                     .allow_any_origin()
@@ -98,20 +156,6 @@ async fn main() -> io::Result<()> {
                     //     .allowed_header(http::header::CONTENT_TYPE)
                     .max_age(3600),
             )
-            .wrap(middleware::SayHi)
-            // .wrap_fn(|req, srv| {
-            //     // println!("Path: {}, headers: {:?}", req.path(), req.headers());
-
-            //     // req.headers();
-            //     // req.headers_mut().insert(
-            //     //     http::HeaderName::from_lowercase(b"test").unwrap(),
-            //     //     http::HeaderValue::from_str("Testing").unwrap(),
-            //     // );
-
-            //     // println!("Headers now: {:?}", req.headers());
-
-            //     srv.call(req)
-            // })
             .service(home)
             // Logins
             .service(google_login_verify)
@@ -138,5 +182,3 @@ async fn main() -> io::Result<()> {
     .run()
     .await
 }
-
-

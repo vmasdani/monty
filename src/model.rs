@@ -20,7 +20,7 @@ pub struct Subscription {
     pub id: Option<i32>,
     pub email_id: Option<i32>,
     pub name: Option<String>,
-    pub cost: Option<i32>,
+    pub cost: Option<f32>,
     pub created_at: Option<NaiveDateTime>,
     pub interval_id: Option<i32>,
     pub interval_amount: Option<i32>,

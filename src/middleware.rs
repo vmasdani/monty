@@ -2,7 +2,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use actix_service::{Service, Transform};
-use actix_web::{Error, dev::ServiceRequest, dev::ServiceResponse, error::{ErrorInternalServerError, InternalError}};
+use actix_web::{Error, dev::ServiceRequest, dev::ServiceResponse, error::{ErrorInternalServerError, ErrorUnauthorized, InternalError}};
 use futures::future::{Either, Ready, ok};
 use futures::Future;
 
@@ -63,9 +63,9 @@ where
             let res = fut.await?;
 
             println!("Hi from response");
-            Ok(res)
+            // Ok(res)
 
-            // Err(ErrorInternalServerError("Not found"))
+            Err(ErrorUnauthorized("Not found"))
         })
     }
 }
