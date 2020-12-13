@@ -1,4 +1,4 @@
-use actix_web::{client::Client, get, post, web, HttpResponse, Responder};
+use actix_web::{client::Client, get, post, web, HttpRequest, HttpResponse, Responder};
 use diesel::{r2d2::ConnectionManager, SqliteConnection};
 
 type DbPool = diesel::r2d2::Pool<ConnectionManager<SqliteConnection>>;
@@ -169,9 +169,7 @@ async fn post_email_save(
                     .first::<Email>(&conn);
 
                 match &found_email {
-                    Ok(email_res) => {
-                        found_email
-                    },
+                    Ok(email_res) => found_email,
                     _ => {
                         diesel::replace_into(emails)
                             .values(&Email {
@@ -179,14 +177,13 @@ async fn post_email_save(
                                 email: Some(email_body.name.clone()),
                                 created_at: None,
                                 currency_id: None,
-                                currencie_id: None
+                                currencie_id: None,
                             })
                             .execute(&conn);
 
-                            
                         emails.order(id.desc()).first::<Email>(&conn)
                     }
-                }                
+                }
             })
             .await;
 
@@ -298,7 +295,9 @@ async fn google_login_verify(id_token_body: web::Json<IdTokenBody>) -> impl Resp
 
 // Currencies
 #[get("/currencies")]
-async fn get_currencies(pool: web::Data<DbPool>) -> impl Responder {
+async fn get_currencies(req: HttpRequest, pool: web::Data<DbPool>) -> impl Responder {
+    // println!("Currency headers: {:?}", req.headers());
+    
     match pool.get() {
         Ok(conn) => {
             let res = web::block(move || {
