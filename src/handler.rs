@@ -178,6 +178,7 @@ async fn post_email_save(
                                 created_at: None,
                                 currency_id: None,
                                 currencie_id: None,
+                                updated_at: None,
                             })
                             .execute(&conn);
 
@@ -297,7 +298,6 @@ async fn google_login_verify(id_token_body: web::Json<IdTokenBody>) -> impl Resp
 #[get("/currencies")]
 async fn get_currencies(req: HttpRequest, pool: web::Data<DbPool>) -> impl Responder {
     // println!("Currency headers: {:?}", req.headers());
-    
     match pool.get() {
         Ok(conn) => {
             let res = web::block(move || {

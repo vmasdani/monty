@@ -25,7 +25,8 @@ pub fn populate(conn: PooledConnection<ConnectionManager<SqliteConnection>>) {
                 let currency = Currencie {
                     id: None,
                     name: Some(String::from(currency_name)),
-                    created_at: None
+                    created_at: None,
+                    updated_at: None
                 };
 
                 diesel::replace_into(currencies)
@@ -54,7 +55,8 @@ pub fn populate(conn: PooledConnection<ConnectionManager<SqliteConnection>>) {
                     let interval = Interval {
                         id: None,
                         name: Some(String::from(interval_name)),
-                        created_at: None
+                        created_at: None,
+                        updated_at: None
                     };
                     diesel::replace_into(intervals)
                         .values(&interval)

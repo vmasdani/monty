@@ -1,16 +1,18 @@
 table! {
     currencies (id) {
         id -> Nullable<Integer>,
-        name -> Nullable<Text>,
         created_at -> Nullable<Timestamp>,
+        updated_at -> Nullable<Timestamp>,
+        name -> Nullable<Text>,
     }
 }
 
 table! {
     emails (id) {
         id -> Nullable<Integer>,
-        email -> Nullable<Text>,
         created_at -> Nullable<Timestamp>,
+        updated_at -> Nullable<Timestamp>,
+        email -> Nullable<Text>,
         currency_id -> Nullable<Integer>,
         currencie_id -> Nullable<Integer>,
     }
@@ -19,27 +21,30 @@ table! {
 table! {
     intervals (id) {
         id -> Nullable<Integer>,
-        name -> Nullable<Text>,
         created_at -> Nullable<Timestamp>,
+        updated_at -> Nullable<Timestamp>,
+        name -> Nullable<Text>,
     }
 }
 
 table! {
     intervals_subscriptions (id) {
         id -> Nullable<Integer>,
+        created_at -> Nullable<Timestamp>,
+        updated_at -> Nullable<Timestamp>,
         interval_id -> Nullable<Integer>,
         subscription_id -> Nullable<Integer>,
-        created_at -> Nullable<Timestamp>,
     }
 }
 
 table! {
     subscriptions (id) {
         id -> Nullable<Integer>,
+        created_at -> Nullable<Timestamp>,
+        updated_at -> Nullable<Timestamp>,
         email_id -> Nullable<Integer>,
         name -> Nullable<Text>,
         cost -> Nullable<Float>,
-        created_at -> Nullable<Timestamp>,
         interval_id -> Nullable<Integer>,
         interval_amount -> Nullable<Integer>,
     }
