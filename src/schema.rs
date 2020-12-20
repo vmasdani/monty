@@ -4,6 +4,7 @@ table! {
         created_at -> Nullable<Timestamp>,
         updated_at -> Nullable<Timestamp>,
         name -> Nullable<Text>,
+        rate -> Nullable<Float>,
     }
 }
 
