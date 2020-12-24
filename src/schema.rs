@@ -5,6 +5,7 @@ table! {
         updated_at -> Nullable<Timestamp>,
         name -> Nullable<Text>,
         rate -> Nullable<Float>,
+        last_update_day -> Nullable<Timestamp>,
     }
 }
 

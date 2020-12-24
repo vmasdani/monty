@@ -69,7 +69,8 @@ pub struct Currencie {
     pub created_at: Option<NaiveDateTime>,
     pub updated_at: Option<NaiveDateTime>,
     pub name: Option<String>,
-    pub rate: Option<f32>
+    pub rate: Option<f32>,
+    pub last_update_day: Option<NaiveDateTime>
 }
  
 // gen_struct!(

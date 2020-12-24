@@ -17,6 +17,7 @@ use std::{
     io,
     pin::Pin,
     task::{Context, Poll},
+    time::Duration,
 };
 
 use actix_cors::Cors;
@@ -24,20 +25,27 @@ use actix_service::{Service, Transform};
 use actix_web::{
     dev::{ServiceRequest, ServiceResponse},
     error::{ErrorBadRequest, ErrorUnauthorized},
-    get, http, web, App, Error, HttpResponse, HttpServer, Responder,
+    get, http, web, App, Error, HttpResponse, HttpServer, Responder, Result,
 };
-use diesel::{prelude::*, r2d2::ConnectionManager, SqliteConnection};
+use chrono::{Datelike, NaiveDate, Utc};
+use diesel::{
+    prelude::*,
+    r2d2::{ConnectionManager, Pool},
+    SqliteConnection,
+};
 use diesel_migrations::embed_migrations;
 use futures::{
     future::{ok, Either, FutureExt, Ready},
     Future,
 };
 use http::StatusCode;
-use model::Email;
+use model::{Currencie, Email};
+use tokio::task::LocalSet;
 
 type DbPool = diesel::r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
 use crate::handler::*;
+use tokio_diesel::*;
 
 #[derive(Deserialize)]
 struct QueryInfo {
@@ -64,8 +72,8 @@ async fn index(
 
 embed_migrations!();
 
-#[actix_web::main]
-async fn main() -> io::Result<()> {
+#[tokio::main]
+async fn main() {
     let manager = ConnectionManager::<SqliteConnection>::new("db.sqlite3");
     let pool = diesel::r2d2::Pool::builder()
         .max_size(1)
@@ -95,7 +103,21 @@ async fn main() -> io::Result<()> {
         }
     }
 
-    HttpServer::new(move || {
+    let actix_data_pool_clone = pool.clone();
+    let poll_db_pool_clone = pool.clone();
+
+    tokio::join!(run_http(actix_data_pool_clone), poll_db(poll_db_pool_clone));
+}
+
+async fn my_async_fun() {
+    tokio::time::delay_for(Duration::from_secs(1)).await;
+}
+
+async fn run_http(pool: Pool<ConnectionManager<SqliteConnection>>) -> () {
+    let local = LocalSet::new();
+    let sys = actix_web::rt::System::run_in_tokio("server", &local);
+
+    let server = HttpServer::new(move || {
         App::new()
             .data(pool.clone())
             .wrap_fn(|req, srv| {
@@ -120,21 +142,20 @@ async fn main() -> io::Result<()> {
 
                             let resp = reqwest::get(url.as_str()).await;
 
-                            let authorized =
-                                match resp {
-                                    Ok(resp_res) => {
-                                        if resp_res.status() == StatusCode::OK {
-                                            true
-                                        } else {
-                                            println!("Token invalid! {}",  resp_res.status());
-                                            false
-                                        }
-                                    }
-                                    _ => {
-                                        println!("Unauthorized!");
+                            let authorized = match resp {
+                                Ok(resp_res) => {
+                                    if resp_res.status() == StatusCode::OK {
+                                        true
+                                    } else {
+                                        println!("Token invalid! {}", resp_res.status());
                                         false
                                     }
-                                };
+                                }
+                                _ => {
+                                    println!("Unauthorized!");
+                                    false
+                                }
+                            };
 
                             if authorized {
                                 Ok(res)
@@ -178,7 +199,103 @@ async fn main() -> io::Result<()> {
         // .route("/", web::get().to(home))
         // .route("/{name}", web::get().to(index))
     })
-    .bind("127.0.0.1:8080")?
-    .run()
-    .await
+    .bind("127.0.0.1:8080");
+
+    match server {
+        Ok(srv) => {
+            srv.run().await;
+        }
+        _ => {
+            println!("Error running HTTP srever.");
+        }
+    }
+}
+
+async fn poll_db(pool: Pool<ConnectionManager<SqliteConnection>>) -> () {
+    const CURRENCIES_LIST: [&str; 168] = [
+        "AED", "AFN", "ALL", "AMD", "ANG", "AOA", "ARS", "AUD", "AWG", "AZN", "BAM", "BBD", "BDT",
+        "BGN", "BHD", "BIF", "BMD", "BND", "BOB", "BRL", "BSD", "BTC", "BTN", "BWP", "BYN", "BYR",
+        "BZD", "CAD", "CDF", "CHF", "CLF", "CLP", "CNY", "COP", "CRC", "CUC", "CUP", "CVE", "CZK",
+        "DJF", "DKK", "DOP", "DZD", "EGP", "ERN", "ETB", "EUR", "FJD", "FKP", "GBP", "GEL", "GGP",
+        "GHS", "GIP", "GMD", "GNF", "GTQ", "GYD", "HKD", "HNL", "HRK", "HTG", "HUF", "IDR", "ILS",
+        "IMP", "INR", "IQD", "IRR", "ISK", "JEP", "JMD", "JOD", "JPY", "KES", "KGS", "KHR", "KMF",
+        "KPW", "KRW", "KWD", "KYD", "KZT", "LAK", "LBP", "LKR", "LRD", "LSL", "LTL", "LVL", "LYD",
+        "MAD", "MDL", "MGA", "MKD", "MMK", "MNT", "MOP", "MRO", "MUR", "MVR", "MWK", "MXN", "MYR",
+        "MZN", "NAD", "NGN", "NIO", "NOK", "NPR", "NZD", "OMR", "PAB", "PEN", "PGK", "PHP", "PKR",
+        "PLN", "PYG", "QAR", "RON", "RSD", "RUB", "RWF", "SAR", "SBD", "SCR", "SDG", "SEK", "SGD",
+        "SHP", "SLL", "SOS", "SRD", "STD", "SVC", "SYP", "SZL", "THB", "TJS", "TMT", "TND", "TOP",
+        "TRY", "TTD", "TWD", "TZS", "UAH", "UGX", "USD", "UYU", "UZS", "VEF", "VND", "VUV", "WST",
+        "XAF", "XAG", "XAU", "XCD", "XDR", "XOF", "XPF", "YER", "ZAR", "ZMK", "ZMW", "ZWL",
+    ];
+
+    loop {
+        let mut currencies_handle = vec![];
+
+        CURRENCIES_LIST.into_iter().for_each(|currency_name| {
+            let pool_clone = pool.clone();
+
+            currencies_handle.push(async move {
+                use crate::schema::currencies::dsl::*;
+
+                let found_currency = currencies
+                    .filter(name.eq(currency_name))
+                    .first_async::<Currencie>(&pool_clone)
+                    .await;
+
+                match found_currency {
+                    Ok(currency) => {
+                        match currency.last_update_day {
+                            Some(update_day) => {
+                                let current_utc = Utc::now();
+                                let current_naive_date_time = NaiveDate::from_ymd(
+                                    current_utc.year(),
+                                    current_utc.month(),
+                                    current_utc.day(),
+                                )
+                                .and_hms(0, 0, 0);
+
+                                let comp = current_naive_date_time.gt(&update_day);
+
+                                println!(
+                        "Currency {} found. Last update: {:?}, current: {}, greater? {}",
+                        currency_name, currency.last_update_day, current_naive_date_time, comp
+                    );
+                            }
+                            None => {
+                                println!("Currency {} found, last update invalid.", currency_name);
+                            }
+                        }
+                    }
+                    Err(_) => {
+                        let utc_now = Utc::now();
+                        let naive_date_time_now =
+                            NaiveDate::from_ymd(utc_now.year(), utc_now.month(), utc_now.day())
+                                .and_hms(0, 0, 0);
+
+                        println!(
+                            "Currency {} not found! Creating..., Update date: {:?}",
+                            currency_name, naive_date_time_now
+                        );
+
+                        diesel::replace_into(currencies)
+                            .values(Currencie {
+                                id: None,
+                                name: Some(currency_name.to_string()),
+                                created_at: None,
+                                updated_at: None,
+                                rate: Some(0.0),
+                                last_update_day: Some(naive_date_time_now),
+                            })
+                            .execute_async(&pool_clone);
+                    }
+                }
+            });
+        });
+
+        for currency_handle in currencies_handle {
+            currency_handle.await;
+        }
+
+        tokio::time::delay_for(Duration::from_secs(10)).await;
+    }
 }
