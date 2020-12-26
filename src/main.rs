@@ -13,13 +13,6 @@ pub mod model;
 pub mod populate;
 pub mod schema;
 
-use std::{
-    io,
-    pin::Pin,
-    task::{Context, Poll},
-    time::Duration,
-};
-
 use actix_cors::Cors;
 use actix_service::{Service, Transform};
 use actix_web::{
@@ -27,20 +20,29 @@ use actix_web::{
     error::{ErrorBadRequest, ErrorUnauthorized},
     get, http, web, App, Error, HttpResponse, HttpServer, Responder, Result,
 };
-use chrono::{Datelike, NaiveDate, Utc};
+use chrono::{Datelike, NaiveDate, NaiveDateTime, Utc};
 use diesel::{
     prelude::*,
     r2d2::{ConnectionManager, Pool},
     SqliteConnection,
 };
 use diesel_migrations::embed_migrations;
+use dotenv::dotenv;
 use futures::{
     future::{ok, Either, FutureExt, Ready},
     Future,
 };
 use http::StatusCode;
 use model::{Currencie, Email};
-use tokio::task::LocalSet;
+use serde_json::Value;
+use std::{
+    env, io,
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+    time::Duration,
+};
+use tokio::{sync::Mutex, task::LocalSet};
 
 type DbPool = diesel::r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
@@ -74,7 +76,22 @@ embed_migrations!();
 
 #[tokio::main]
 async fn main() {
-    let manager = ConnectionManager::<SqliteConnection>::new("db.sqlite3");
+    dotenv().ok();
+
+    let mut DATABASE_URL = String::new();
+    let mut FIXER_API_KEY = String::new();
+
+    for (key, value) in env::vars() {
+        match key.as_str() {
+            "DATABASE_URL" => DATABASE_URL = value,
+            "FIXER_API_KEY" => FIXER_API_KEY = value,
+            _ => {
+                println!(".env variable irrelevant");
+            }
+        }
+    }
+
+    let manager = ConnectionManager::<SqliteConnection>::new(DATABASE_URL);
     let pool = diesel::r2d2::Pool::builder()
         .max_size(1)
         .build(manager)
@@ -106,7 +123,10 @@ async fn main() {
     let actix_data_pool_clone = pool.clone();
     let poll_db_pool_clone = pool.clone();
 
-    tokio::join!(run_http(actix_data_pool_clone), poll_db(poll_db_pool_clone));
+    tokio::join!(
+        run_http(actix_data_pool_clone),
+        poll_db(poll_db_pool_clone, FIXER_API_KEY)
+    );
 }
 
 async fn my_async_fun() {
@@ -211,7 +231,7 @@ async fn run_http(pool: Pool<ConnectionManager<SqliteConnection>>) -> () {
     }
 }
 
-async fn poll_db(pool: Pool<ConnectionManager<SqliteConnection>>) -> () {
+async fn poll_db(pool: Pool<ConnectionManager<SqliteConnection>>, fixer_api_key: String) -> () {
     const CURRENCIES_LIST: [&str; 168] = [
         "AED", "AFN", "ALL", "AMD", "ANG", "AOA", "ARS", "AUD", "AWG", "AZN", "BAM", "BBD", "BDT",
         "BGN", "BHD", "BIF", "BMD", "BND", "BOB", "BRL", "BSD", "BTC", "BTN", "BWP", "BYN", "BYR",
@@ -231,8 +251,11 @@ async fn poll_db(pool: Pool<ConnectionManager<SqliteConnection>>) -> () {
     loop {
         let mut currencies_handle = vec![];
 
-        CURRENCIES_LIST.into_iter().for_each(|currency_name| {
+        let un_updated = Arc::new(Mutex::new(0));
+
+        CURRENCIES_LIST.iter().for_each(|currency_name| {
             let pool_clone = pool.clone();
+            let un_updated_clone = un_updated.clone();
 
             currencies_handle.push(async move {
                 use crate::schema::currencies::dsl::*;
@@ -243,29 +266,32 @@ async fn poll_db(pool: Pool<ConnectionManager<SqliteConnection>>) -> () {
                     .await;
 
                 match found_currency {
-                    Ok(currency) => {
-                        match currency.last_update_day {
-                            Some(update_day) => {
-                                let current_utc = Utc::now();
-                                let current_naive_date_time = NaiveDate::from_ymd(
-                                    current_utc.year(),
-                                    current_utc.month(),
-                                    current_utc.day(),
-                                )
-                                .and_hms(0, 0, 0);
+                    Ok(currency) => match currency.last_update_day {
+                        Some(update_day) => {
+                            let utc_now = Utc::now();
+                            let current_naive_date_time =
+                                NaiveDate::from_ymd(utc_now.year(), utc_now.month(), utc_now.day())
+                                    .and_hms(0, 0, 0);
 
-                                let comp = current_naive_date_time.gt(&update_day);
+                            let comp = current_naive_date_time.gt(&update_day);
 
-                                println!(
-                        "Currency {} found. Last update: {:?}, current: {}, greater? {}",
-                        currency_name, currency.last_update_day, current_naive_date_time, comp
-                    );
-                            }
-                            None => {
-                                println!("Currency {} found, last update invalid.", currency_name);
+                            println!(
+                                "Currency {} found ({}). Last update: {:?}, current: {}, greater? {}",
+                                currency_name,
+                                currency.rate.unwrap_or(0.0),
+                                currency.last_update_day,
+                                current_naive_date_time,
+                                comp
+                            );
+                            if comp {
+                                let mut un_updated_lock = un_updated_clone.lock().await;
+                                *un_updated_lock = *un_updated_lock + 1;
                             }
                         }
-                    }
+                        None => {
+                            println!("Currency {} found, last update invalid.", currency_name);
+                        }
+                    },
                     Err(_) => {
                         let utc_now = Utc::now();
                         let naive_date_time_now =
@@ -286,7 +312,8 @@ async fn poll_db(pool: Pool<ConnectionManager<SqliteConnection>>) -> () {
                                 rate: Some(0.0),
                                 last_update_day: Some(naive_date_time_now),
                             })
-                            .execute_async(&pool_clone);
+                            .execute_async(&pool_clone)
+                            .await;
                     }
                 }
             });
@@ -296,6 +323,95 @@ async fn poll_db(pool: Pool<ConnectionManager<SqliteConnection>>) -> () {
             currency_handle.await;
         }
 
-        tokio::time::delay_for(Duration::from_secs(10)).await;
+        let un_updated_clone = un_updated.clone();
+        let un_updated_val: i32 = *un_updated_clone.lock().await;
+
+        println!("Currencies not updated: {}", un_updated_val);
+
+        if un_updated_val > 0 {
+            let fixer_url = format!(
+                "http://data.fixer.io/api/latest?access_key={}",
+                fixer_api_key
+            );
+
+            println!("Updating! {}", fixer_url);
+
+            let resp_res = reqwest::get(fixer_url.as_str()).await;
+
+            match resp_res {
+                Ok(resp) => match resp.text().await {
+                    Ok(resp_text) => {
+                        // println!("Resp text: {}", resp_text);
+
+                        match serde_json::from_str(resp_text.as_str()) as Result<Value, _> {
+                            Ok(resp_json) => {
+                                let mut currency_list_handles = vec![];
+
+                                CURRENCIES_LIST.iter().for_each(|currency_name| {
+                                    let pool = pool.clone();
+                                    let rate_f64 =
+                                        resp_json["rates"][currency_name].as_f64().unwrap_or(0.0);
+
+                                    println!("currency: {}, rate: {}", currency_name, rate_f64);
+
+                                    currency_list_handles.push(async move {
+                                        use crate::schema::currencies::dsl::*;
+
+                                        let found_currencie_res = currencies
+                                            .filter(name.eq(currency_name))
+                                            .first_async::<Currencie>(&pool)
+                                            .await;
+
+                                        match found_currencie_res {
+                                            Ok(mut found_currencie) => {
+                                                let utc_now = Utc::now();
+                                                let naive_date_time_now = NaiveDate::from_ymd(
+                                                    utc_now.year(),
+                                                    utc_now.month(),
+                                                    utc_now.day(),
+                                                )
+                                                .and_hms(0, 0, 0);
+
+                                                found_currencie.rate = Some(rate_f64 as f32);
+                                                found_currencie.last_update_day =
+                                                    Some(naive_date_time_now);
+
+                                                diesel::replace_into(currencies)
+                                                    .values(found_currencie)
+                                                    .execute_async(&pool)
+                                                    .await;
+                                            }
+                                            _ => {
+                                                println!(
+                                                    "currency {} not found in db",
+                                                    currency_name
+                                                );
+                                            }
+                                        }
+                                    });
+                                });
+
+                                for handle in currency_list_handles {
+                                    handle.await;
+                                }
+                            }
+                            _ => {
+                                println!("Failed parsing json");
+                            }
+                        }
+                    }
+                    _ => {
+                        println!("Extracting response text error");
+                    }
+                },
+                _ => {
+                    println!("Error fetching rates");
+                }
+            }
+        } else {
+            println!("No need to update. Already latest.");
+        }
+
+        tokio::time::delay_for(Duration::from_secs(5)).await;
     }
 }
