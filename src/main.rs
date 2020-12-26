@@ -334,7 +334,7 @@ async fn poll_db(pool: Pool<ConnectionManager<SqliteConnection>>, fixer_api_key:
                 fixer_api_key
             );
 
-            println!("Updating! {}", fixer_url);
+            println!("Updating!");
 
             let resp_res = reqwest::get(fixer_url.as_str()).await;
 
@@ -412,6 +412,6 @@ async fn poll_db(pool: Pool<ConnectionManager<SqliteConnection>>, fixer_api_key:
             println!("No need to update. Already latest.");
         }
 
-        tokio::time::delay_for(Duration::from_secs(5)).await;
+        tokio::time::delay_for(Duration::from_secs(3600)).await;
     }
 }
