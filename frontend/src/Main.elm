@@ -14,7 +14,7 @@ import FormatNumber.Locales exposing (spanishLocale, usLocale)
 import Array
 import Debug
 
-port loggedIn : (String -> msg) -> Sub msg
+port loggedIn : (UserInfo -> msg) -> Sub msg
 port signedOut : (() -> msg) -> Sub msg
 port signOut : () -> Cmd msg
 
@@ -28,6 +28,7 @@ type alias Email =
   { id: Maybe Int
   , email: Maybe String
   , createdAt: Maybe String
+  , updatedAt: Maybe String
   , currencyId: Maybe Int
   , currencieId: Maybe Int
   }
@@ -38,8 +39,20 @@ emailDecoder =
     |> Pipeline.required "id" (Decode.maybe Decode.int)
     |> Pipeline.required "email" (Decode.maybe Decode.string)
     |> Pipeline.required "created_at" (Decode.maybe Decode.string)
+    |> Pipeline.required "updated_at" (Decode.maybe Decode.string)
     |> Pipeline.required "currency_id" (Decode.maybe Decode.int)
     |> Pipeline.required "currencie_id" (Decode.maybe Decode.int)
+
+emailEncoder : Email -> Encode.Value
+emailEncoder email =
+  Encode.object
+    [ ( "id", (Encode.int) (Maybe.withDefault 0 email.id) )
+    , ( "email", (Encode.string) (Maybe.withDefault "" email.email) )
+    , ( "created_at", (Encode.string) (Maybe.withDefault "" email.createdAt) )
+    , ( "updated_at", (Encode.string) (Maybe.withDefault "" email.updatedAt) )
+    , ( "currency_id", (Encode.int) (Maybe.withDefault 0 email.currencyId) )
+    , ( "currencie_id", (Encode.int) (Maybe.withDefault 0 email.currencieId) )
+    ]
 
 type alias EmailSaveBody =
   { name : String
@@ -121,9 +134,9 @@ initialUserInfo =
 userInfoDecoder : Decoder UserInfo
 userInfoDecoder =
   Decode.succeed UserInfo
-    |> Pipeline.required "Ad" Decode.string
-    |> Pipeline.required "iK" Decode.string
-    |> Pipeline.required "du" Decode.string  
+    |> Pipeline.required "fullName" Decode.string
+    |> Pipeline.required "imagUrl" Decode.string
+    |> Pipeline.required "email" Decode.string
     |> Pipeline.required "idToken" Decode.string
 
 type alias GoogleUser =
@@ -191,7 +204,7 @@ init flags =
 
 type Msg 
   = NoOp 
-  | LoggedIn String
+  | LoggedIn UserInfo
   | SignOut
   | SignedOut ()
   | GotCurrencies (Result Http.Error (List Currencie))
@@ -211,18 +224,9 @@ update msg model =
     NoOp -> 
       ( model, Cmd.none )
 
-    LoggedIn loginInfo ->
+    LoggedIn userInfo ->
       let
-        decodedUser = Decode.decodeString userInfoDecoder loginInfo
-
-        userInfo =
-          case decodedUser of
-            Ok user ->
-              Just user
-            _ ->
-              Nothing
-
-        newModel = { model | user = userInfo }
+        newModel = { model | user = Just userInfo }
       in
       fetchEmail newModel
 
@@ -256,8 +260,11 @@ update msg model =
 
             _ ->
               Nothing
+
+        newModel = { model | requestStatus = Loading, email = newEmail }
       in
-      ( { model | email = newEmail }, Cmd.none )
+      (Debug.log <| Debug.toString <| newEmail)
+      saveEmail newModel
 
     InsertSubscription ->
       let
@@ -674,3 +681,33 @@ fetchEmail model =
       ] 
     
   )
+
+saveEmail : Model -> ( Model,  Cmd Msg )
+saveEmail model =
+  ( model
+  , Http.request
+    { method = "POST"
+    , headers = 
+        [ Http.header 
+            "authorization" 
+            (case model.user of
+              Just user ->
+                user.idToken 
+              
+              _ ->
+                ""
+            )
+        ]
+    , url = model.url ++ "/emails"
+    , body = case model.email of 
+        Just email ->
+          Http.jsonBody (emailEncoder email)
+
+        _ ->
+          Http.emptyBody    
+    , expect = Http.expectJson GotEmail emailDecoder
+    , timeout = Nothing
+    , tracker = Nothing
+    }
+  )
+  

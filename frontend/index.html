@@ -47,15 +47,19 @@
         const basicProfile = googleUser.getBasicProfile();
         const idToken = googleUser.getAuthResponse().id_token;
 
-        console.log("Basic profile:", googleUser.getBasicProfile());
+        console.log("Basic profile:", basicProfile);
         console.log("ID token:", idToken);
 
         const data = {
-          ...basicProfile,
+          fullName: basicProfile.getName(),
+          imageUrl: basicProfile.getImageUrl(),
+          email: basicProfile.getEmail(),
           idToken: idToken,
         };
 
-        app.ports.loggedIn.send(JSON.stringify(data));
+        console.log('User info:', data);
+
+        app.ports.loggedIn.send(data);
       }
     </script>
   </body>

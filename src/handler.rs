@@ -136,12 +136,16 @@ async fn post_email(pool: web::Data<DbPool>, email_body: web::Json<Email>) -> im
                 use crate::schema::emails::dsl::{emails, id};
                 diesel::replace_into(emails)
                     .values(&email_body.into_inner())
-                    .execute(&conn)
+                    .execute(&conn);
+
+                emails.order(id.desc()).first::<Email>(&conn)
             })
             .await;
 
+            
+
             match res {
-                Ok(_) => HttpResponse::Created().body("OK"),
+                Ok(email) => HttpResponse::Created().json(email),
                 _ => HttpResponse::InternalServerError().body("Error replacing email!"),
             }
         }
