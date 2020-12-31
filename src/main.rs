@@ -14,7 +14,7 @@ pub mod schema;
 
 use actix_cors::Cors;
 use actix_service::{Service, Transform};
-use actix_web::{App, Error, HttpResponse, HttpServer, Responder, Result, dev::{ServiceRequest, ServiceResponse}, error::{ErrorBadRequest, ErrorUnauthorized}, get, http, middleware, web};
+use actix_web::{App, Error, HttpResponse, HttpServer, Responder, Result, dev::{ServiceRequest, ServiceResponse}, error::{ErrorBadRequest, ErrorUnauthorized}, get, http::{self, ContentEncoding}, middleware, web};
 use chrono::{Datelike, NaiveDate, NaiveDateTime, Utc};
 use diesel::{
     prelude::*,
@@ -135,7 +135,7 @@ async fn run_http(pool: Pool<ConnectionManager<SqliteConnection>>) -> () {
     let server = HttpServer::new(move || {
         App::new()
             .data(pool.clone())
-            .wrap(middleware::Compress::default())
+            .wrap(middleware::Compress::new(ContentEncoding::Br))
             .wrap_fn(|req, srv| {
                 let auth_header = match req.headers().get("authorization") {
                     Some(auth) => Some(String::from(auth.to_str().unwrap_or(""))),
@@ -376,6 +376,8 @@ async fn poll_db(pool: Pool<ConnectionManager<SqliteConnection>>, fixer_api_key:
                                                 found_currencie.rate = Some(rate_f64 as f32);
                                                 found_currencie.last_update_day =
                                                     Some(naive_date_time_now);
+
+                                                println!("Updated currency {}: on {:?}", currency_name, found_currencie.last_update_day);
 
                                                 diesel::replace_into(currencies)
                                                     .values(found_currencie)
