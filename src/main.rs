@@ -8,18 +8,13 @@ extern crate serde;
 extern crate diesel_migrations;
 
 pub mod handler;
-pub mod middleware;
 pub mod model;
 pub mod populate;
 pub mod schema;
 
 use actix_cors::Cors;
 use actix_service::{Service, Transform};
-use actix_web::{
-    dev::{ServiceRequest, ServiceResponse},
-    error::{ErrorBadRequest, ErrorUnauthorized},
-    get, http, web, App, Error, HttpResponse, HttpServer, Responder, Result,
-};
+use actix_web::{App, Error, HttpResponse, HttpServer, Responder, Result, dev::{ServiceRequest, ServiceResponse}, error::{ErrorBadRequest, ErrorUnauthorized}, get, http, middleware, web};
 use chrono::{Datelike, NaiveDate, NaiveDateTime, Utc};
 use diesel::{
     prelude::*,
@@ -140,6 +135,7 @@ async fn run_http(pool: Pool<ConnectionManager<SqliteConnection>>) -> () {
     let server = HttpServer::new(move || {
         App::new()
             .data(pool.clone())
+            .wrap(middleware::Compress::default())
             .wrap_fn(|req, srv| {
                 let auth_header = match req.headers().get("authorization") {
                     Some(auth) => Some(String::from(auth.to_str().unwrap_or(""))),
