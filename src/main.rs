@@ -296,7 +296,7 @@ async fn poll_db(pool: Pool<ConnectionManager<SqliteConnection>>, fixer_api_key:
                         let utc_now = Utc::now();
                         let naive_date_time_now =
                             NaiveDate::from_ymd(utc_now.year(), utc_now.month(), utc_now.day())
-                                .and_hms(0, 0, 0);
+                                .and_hms(0, 0, 0); 
 
                         println!(
                             "Currency {} not found! Creating..., Update date: {:?}",
@@ -310,10 +310,15 @@ async fn poll_db(pool: Pool<ConnectionManager<SqliteConnection>>, fixer_api_key:
                                 created_at: None,
                                 updated_at: None,
                                 rate: Some(0.0),
-                                last_update_day: Some(naive_date_time_now),
+                                // last_update_day: Some(naive_date_time_now),
+                                last_update_day: None,
                             })
                             .execute_async(&pool_clone)
                             .await;
+
+                        // Increase non updated
+                        let mut un_updated_val = un_updated_clone.lock().await;
+                        *un_updated_val = *un_updated_val + 1;
                     }
                 }
             });
