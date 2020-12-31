@@ -7,9 +7,13 @@ extern crate serde;
 #[macro_use]
 extern crate diesel_migrations;
 
+#[macro_use]
+extern crate actix_web;
+
 pub mod handler;
 pub mod model;
 pub mod populate;
+pub mod postbody;
 pub mod schema;
 
 use actix_cors::Cors;
@@ -41,7 +45,7 @@ use tokio::{sync::Mutex, task::LocalSet};
 
 type DbPool = diesel::r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
-use crate::handler::*;
+use handler::*;
 use tokio_diesel::*;
 
 #[derive(Deserialize)]
@@ -202,6 +206,7 @@ async fn run_http(pool: Pool<ConnectionManager<SqliteConnection>>) -> () {
             .service(get_email)
             .service(post_email)
             .service(post_email_save)
+            .service(post_email_save_bulk)
             .service(get_email_subscriptions)
             .service(get_email_by_name_subscriptions)
             // Subscriptions

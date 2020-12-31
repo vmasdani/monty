@@ -34,9 +34,9 @@ pub fn populate(conn: PooledConnection<ConnectionManager<SqliteConnection>>) {
     
 
     // Populate Interval
-    vec!["Day", "Week", "Month", "Year"]
+    vec![("Day", 28.0), ("Week", 4.0), ("Month", 1.0), ("Year", 1.0/12.0)]
         .into_iter()
-        .for_each(|interval_name| {
+        .for_each(|(interval_name, interval_modifier)| {
             use crate::schema::intervals::dsl::*;
 
             let found_interval = intervals
@@ -54,6 +54,7 @@ pub fn populate(conn: PooledConnection<ConnectionManager<SqliteConnection>>) {
                         name: Some(String::from(interval_name)),
                         created_at: None,
                         updated_at: None,
+                        modifier: Some(interval_modifier)
                     };
                     diesel::replace_into(intervals)
                         .values(&interval)

@@ -26,6 +26,7 @@ table! {
         created_at -> Nullable<Timestamp>,
         updated_at -> Nullable<Timestamp>,
         name -> Nullable<Text>,
+        modifier -> Nullable<Float>,
     }
 }
 
@@ -49,6 +50,7 @@ table! {
         cost -> Nullable<Float>,
         interval_id -> Nullable<Integer>,
         interval_amount -> Nullable<Integer>,
+        currencie_id -> Nullable<Integer>,
     }
 }
 

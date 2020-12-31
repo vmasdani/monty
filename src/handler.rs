@@ -3,6 +3,7 @@ use diesel::{r2d2::ConnectionManager, SqliteConnection};
 
 type DbPool = diesel::r2d2::Pool<ConnectionManager<SqliteConnection>>;
 
+use crate::postbody::*;
 use crate::{model::*, schema};
 use diesel::prelude::*;
 
@@ -142,8 +143,6 @@ async fn post_email(pool: web::Data<DbPool>, email_body: web::Json<Email>) -> im
             })
             .await;
 
-            
-
             match res {
                 Ok(email) => HttpResponse::Created().json(email),
                 _ => HttpResponse::InternalServerError().body("Error replacing email!"),
@@ -188,6 +187,65 @@ async fn post_email_save(
 
                         emails.order(id.desc()).first::<Email>(&conn)
                     }
+                }
+            })
+            .await;
+
+            match res {
+                Ok(body) => HttpResponse::Created().json(body),
+                _ => HttpResponse::InternalServerError().body("Error replacing email!"),
+            }
+        }
+        _ => HttpResponse::InternalServerError().body("Getting connection error!"),
+    }
+}
+#[post("/emails/save-bulk")]
+async fn post_email_save_bulk(
+    pool: web::Data<DbPool>,
+    email_body: web::Json<EmailPostBody>,
+) -> impl Responder {
+    // println!("{:#?}", email_body);
+
+    match pool.get() {
+        Ok(conn) => {
+            let res = web::block(move || {
+                // Save email 
+                {
+                    use crate::schema::emails::dsl::*;
+                    diesel::replace_into(emails)
+                        .values(&email_body.email)
+                        .execute(&conn);
+                }
+
+                // Save subscriptions
+                {
+                    use crate::schema::subscriptions::dsl::*;
+                    
+                    email_body.subscriptions.iter().for_each(|subscription| {
+                        println!("{:?}", subscription);
+
+                        diesel::replace_into(subscriptions)
+                        .values(subscription)
+                        .execute(&conn);
+                    });
+                }
+
+                // Delete unwanted subscriptions
+                {
+                    use crate::schema::subscriptions::dsl::*;
+                    
+                    email_body.subscription_delete_ids.iter().for_each(|subscription_id| {
+                        println!("Delete IDs: {:?}", subscription_id);
+
+                        diesel::delete(subscriptions.filter(id.eq(subscription_id)))
+                        .execute(&conn);
+                    });
+                }
+
+                // Get last saved email
+                {
+                    use crate::schema::emails::dsl::*;
+                    emails.order(id.desc()).first::<Email>(&conn)
                 }
             })
             .await;
@@ -275,7 +333,7 @@ struct IdTokenBody {
 }
 
 #[post("/google-login-verify")]
-async fn google_login_verify(id_token_body: web::Json<IdTokenBody>) -> impl Responder {
+pub async fn google_login_verify(id_token_body: web::Json<IdTokenBody>) -> impl Responder {
     println!("Verifying login!");
 
     let url = format!(

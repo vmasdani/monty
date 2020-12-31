@@ -12,7 +12,8 @@ import List.Extra as List
 import FormatNumber exposing (format)
 import FormatNumber.Locales exposing (spanishLocale, usLocale)
 import Array
-import Debug
+import String
+import Maybe
 
 port loggedIn : (UserInfo -> msg) -> Sub msg
 port signedOut : (() -> msg) -> Sub msg
@@ -31,6 +32,16 @@ type alias Email =
   , updatedAt: Maybe String
   , currencyId: Maybe Int
   , currencieId: Maybe Int
+  }
+
+initialEmail : Email
+initialEmail =
+  { id = Nothing
+  , email = Just ""
+  , createdAt = Nothing
+  , updatedAt = Nothing
+  , currencieId = Nothing
+  , currencyId = Nothing
   }
 
 emailDecoder : Decoder Email
@@ -63,40 +74,113 @@ emailSaveBodyEncoder emailName =
   Encode.object
     [ ( "name", Encode.string emailName ) ]
   
+type alias EmailPostBody =
+  { email : Email
+  , subscriptions : List Subscription
+  , subscriptionDeleteIds: List Int
+  } 
+
+emailPostBodyEncoder : Email -> List Subscription -> List Int -> Encode.Value
+emailPostBodyEncoder  email subscriptions_list delete_ids =
+  Encode.object
+    [ ( "email", emailEncoder email )
+    , ( "subscriptions", (Encode.list subscriptionEncoder) subscriptions_list )
+    , ( "subscription_delete_ids", (Encode.list Encode.int) delete_ids )
+    ]
 
 type alias Subscription =
   { id: Maybe Int
-  , email_id: Maybe String
+  , emailId: Maybe Int
   , name: Maybe String
   , cost: Maybe Float
   , intervalId: Maybe Int
   , intervalAmount: Maybe Int
+  , createdAt: Maybe String
+  , updatedAt: Maybe String
+  , currencieId: Maybe Int
   }
 
 initialSubscription : Subscription
 initialSubscription =
   { id = Nothing
-  , email_id = Nothing
+  , emailId = Nothing
   , name = Just ""
-  , cost = Just 0
+  , cost = Just 1
   , intervalId = Nothing
-  , intervalAmount = Just 0
+  , intervalAmount = Just 1
+  , createdAt = Nothing
+  , updatedAt = Nothing
+  , currencieId = Nothing
   }
 
 subscriptionDecoder : Decoder Subscription
 subscriptionDecoder =
   Decode.succeed Subscription
     |> Pipeline.required "id" (Decode.maybe Decode.int)
-    |> Pipeline.required "email" (Decode.maybe Decode.string)
+    |> Pipeline.required "email_id" (Decode.maybe Decode.int)
     |> Pipeline.required "name" (Decode.maybe Decode.string)
     |> Pipeline.required "cost" (Decode.maybe Decode.float)
     |> Pipeline.required "interval_id" (Decode.maybe Decode.int)
     |> Pipeline.required "interval_amount" (Decode.maybe Decode.int)
-    
+    |> Pipeline.required "created_at" (Decode.maybe Decode.string)
+    |> Pipeline.required "updated_at" (Decode.maybe Decode.string)
+    |> Pipeline.required "currencie_id" (Decode.maybe Decode.int)
+  
+subscriptionEncoder : Subscription -> Encode.Value
+subscriptionEncoder subscription =
+  Encode.object
+    [ ( "id"
+      , case subscription.id of
+          Just subscriptionId ->
+            Encode.int subscriptionId 
+          
+          _ ->
+            Encode.null
+      )
+    , ( "email_id"
+      , case subscription.emailId of
+          Just emailId ->
+            Encode.int emailId
+          
+          _ ->
+            Encode.null
+        )
+    , ( "name", Encode.string  (Maybe.withDefault "" subscription.name) )
+    , ( "cost", Encode.float  (Maybe.withDefault 0 subscription.cost) )
+    , ( "interval_id", Encode.int  (Maybe.withDefault 0 subscription.intervalId) )
+    , ( "interval_amount", Encode.int  (Maybe.withDefault 0 subscription.intervalAmount) )
+    , ( "created_at"
+      , case subscription.createdAt of
+          Just createdAt ->
+            Encode.string createdAt 
+          
+          _ ->
+            Encode.null
+      )
+    , ( "updated_at"
+      , case subscription.updatedAt of
+          Just updatedAt ->
+            Encode.string updatedAt
+          
+          _ ->
+            Encode.null
+      )
+    , ( "currencie_id"
+      , case subscription.currencieId of
+          Just updatedAt ->
+            Encode.int (Maybe.withDefault 0 subscription.currencieId) 
+          
+          _ ->
+            Encode.null
+      )
+    ]
 
 type alias Interval =
   { id: Maybe Int
   , name: Maybe String
+  , createdAt : Maybe String
+  , updatedAt : Maybe String
+  , modifier : Maybe Float
   }
 
 intervalDecoder : Decoder Interval
@@ -104,17 +188,26 @@ intervalDecoder =
   Decode.succeed Interval 
     |> Pipeline.required "id" (Decode.maybe Decode.int)
     |> Pipeline.required "name" (Decode.maybe Decode.string)
+    |> Pipeline.required "created_at" (Decode.maybe Decode.string)
+    |> Pipeline.required "updated_at" (Decode.maybe Decode.string)
+    |> Pipeline.required "modifier" (Decode.maybe Decode.float)
     
 type alias Currencie =
   { id: Maybe Int
   , name: Maybe String
+  , createdAt: Maybe String
+  , updatedAt: Maybe String
+  , rate: Maybe Float
   }
 
 currencieDecoder : Decoder Currencie
 currencieDecoder =
   Decode.succeed Currencie 
     |> Pipeline.required "id" (Decode.maybe Decode.int)
-    |> Pipeline.required "name" (Decode.maybe Decode.string)  
+    |> Pipeline.required "name" (Decode.maybe Decode.string)
+    |> Pipeline.required "created_at" (Decode.maybe Decode.string)
+    |> Pipeline.required "updated_at" (Decode.maybe Decode.string)
+    |> Pipeline.required "rate" (Decode.maybe Decode.float)
 
 type alias UserInfo =
     { fullName : String
@@ -177,6 +270,7 @@ type alias Model =
   , subscriptions : List Subscription
   , email : Maybe Email
   , requestStatus: RequestStatus
+  , deleteIds : List Int
   }
 
 
@@ -193,6 +287,7 @@ init flags =
       , subscriptions = []
       , email = Nothing
       , requestStatus = NotAsked
+      , deleteIds = []
       }
   in
   ( initialModel
@@ -209,6 +304,8 @@ type Msg
   | SignedOut ()
   | GotCurrencies (Result Http.Error (List Currencie))
   | GotIntervals (Result Http.Error (List Interval))
+  | PostedSubscription (Result Http.Error ())
+  | CreatedEmailBulk (Result Http.Error String)
   | SelectCurrency String
   | InsertSubscription
   | GotEmail (Result Http.Error Email)
@@ -217,6 +314,9 @@ type Msg
   | InputSubscriptionPrice Int String
   | InputSubscriptionIntervalAmount Int String
   | InputSubscriptionIntervalId Int String
+  | SaveEmailWithSubscriptions
+  | ChangeSubscriptionCurrencie Int String
+  | DeleteSubscription Int Subscription
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
@@ -263,23 +363,38 @@ update msg model =
 
         newModel = { model | requestStatus = Loading, email = newEmail }
       in
-      (Debug.log <| Debug.toString <| newEmail)
       saveEmail newModel
 
     InsertSubscription ->
       let
-        newSubscriptions = model.subscriptions ++ [ initialSubscription ]  
+        newSubscriptions = 
+          model.subscriptions 
+          ++  [ { initialSubscription 
+                | currencieId =
+                    case model.email of
+                      Just email ->
+                        email.currencieId
+
+                      _ ->
+                        Nothing
+                , emailId =
+                    case model.email of
+                      Just email ->
+                        email.id
+
+                      _ ->
+                        Nothing
+                } 
+              ]  
       in
       ( { model | subscriptions = newSubscriptions }, Cmd.none )
 
     GotEmail res ->
       case res of
         Ok email -> 
-          (Debug.log <| Debug.toString res)
           fetchEmailSubscriptions { model | email = Just email }
 
         _ ->
-          (Debug.log <| Debug.toString res)
           ( model, Cmd.none  )
 
     GotSubscriptions res ->
@@ -287,7 +402,7 @@ update msg model =
         Ok subs ->
           ( { model | subscriptions = subs, requestStatus = Success }, Cmd.none  )
         
-        _ ->
+        Err e ->
           ( { model | requestStatus = Error }, Cmd.none )
 
     InputSubscriptionName i name ->
@@ -306,11 +421,18 @@ update msg model =
       
     InputSubscriptionPrice i priceString ->
       let
+        priceFloat = Maybe.withDefault 1.0 (String.toFloat priceString)
+        finalPrice = 
+          if priceFloat <= 0 then
+            1
+          else
+            priceFloat
+
         newSubscriptions =
           List.indexedMap
             (\ix subscription ->
               if ix == i then
-                { subscription | cost = Just <| Maybe.withDefault 0.0 (String.toFloat priceString) }
+                { subscription | cost = Just <| priceFloat }
               else
                 subscription
             )
@@ -320,11 +442,18 @@ update msg model =
       
     InputSubscriptionIntervalAmount i amountString ->
       let
+        intervalAmountInt = Maybe.withDefault 1 (String.toInt amountString)
+        finalIntervalAmount =
+          if intervalAmountInt <= 0 then
+            1
+          else
+            intervalAmountInt
+
         newSubscriptions =
           List.indexedMap
             (\ix subscription ->
               if ix == i then
-                { subscription | intervalAmount = Just <| Maybe.withDefault 0 (String.toInt amountString) }
+                { subscription | intervalAmount = Just <| finalIntervalAmount }
               else
                 subscription
             )
@@ -344,41 +473,95 @@ update msg model =
             )
             model.subscriptions
       in
-      -- (Debug.log <| Debug.toString intervalIdString)
       ( { model | subscriptions = newSubscriptions }, Cmd.none )
+
+    PostedSubscription res ->
+      case res of
+        Ok(_) ->
+          ( model, Cmd.none )
+          
+        _ ->
+          ( model, Cmd.none )
+
+    SaveEmailWithSubscriptions ->
+      let 
+        newModel = { model | requestStatus = Loading }
+      in
+      saveEmail newModel
+
+    CreatedEmailBulk res ->
+      case res of
+        Ok _ ->
+          ( model, Cmd.none )
+        
+        _ ->
+          ( model, Cmd.none )
+      
+    ChangeSubscriptionCurrencie i currencieId ->
+      let
+        newSubscriptions =
+          List.indexedMap
+            (\ix subscription ->
+              if i == ix then
+                { subscription | currencieId = String.toInt currencieId }
+              else
+                subscription
+            )
+            model.subscriptions
+
+      in
+      ( { model | subscriptions = newSubscriptions }, Cmd.none )
+
+    DeleteSubscription i subs ->
+      let
+        newSubscriptions =
+          (Array.toIndexedList <| Array.fromList model.subscriptions)
+            |> List.filter
+                (\subscriptionTuple ->
+                  let
+                    (ix, subscription) = subscriptionTuple
+                  in
+                  ix /= i
+                )
+            |> List.map (\subscriptionTuple -> Tuple.second subscriptionTuple)
+          
+        deleteIds = model.deleteIds
+        newDeleteIds = deleteIds ++ [ Maybe.withDefault 0 subs.id ]
+      in
+      ( { model | subscriptions = newSubscriptions, deleteIds = newDeleteIds }, Cmd.none )
 
 fetchEmailSubscriptions : Model -> ( Model, Cmd Msg )
 fetchEmailSubscriptions newModel =
   ( newModel
   , Http.request
-    { method = "GET"
-    , headers = 
-        [ Http.header 
-            "authorization" 
-            (case newModel.user of
-              Just user ->
-                user.idToken 
-              
-              _ ->
-                ""
-            )
-        ]
-    , url 
-        = newModel.url 
-        ++ "/emails/byname/" 
-        ++  (case newModel.email of
-              Just email ->
-                Maybe.withDefault "" email.email
+      { method = "GET"
+      , headers = 
+          [ Http.header 
+              "authorization" 
+              (case newModel.user of
+                Just user ->
+                  user.idToken 
+                
+                _ ->
+                  ""
+              )
+          ]
+      , url 
+          = newModel.url 
+          ++ "/emails/byname/" 
+          ++  (case newModel.email of
+                Just email ->
+                  Maybe.withDefault "" email.email
 
-              _ ->
-                ""
-            )
-        ++ "/subscriptions"
-    , body = Http.emptyBody
-    , expect = Http.expectJson GotSubscriptions (Decode.list subscriptionDecoder)
-    , timeout = Nothing
-    , tracker = Nothing
-    }
+                _ ->
+                  ""
+              )
+          ++ "/subscriptions"
+      , body = Http.emptyBody
+      , expect = Http.expectJson GotSubscriptions (Decode.list subscriptionDecoder)
+      , timeout = Nothing
+      , tracker = Nothing
+      }
   )
 
 -- VIEW
@@ -409,7 +592,9 @@ view model =
 
     monthlyPrice =
       List.foldl
-        (\subs acc -> acc + Maybe.withDefault 0.0 subs.cost)
+        (\subs acc -> 
+          acc + getSubscriptionMonthlyPrice model.email subs model.currencies model.intervals
+        )
         0.0
         model.subscriptions
   in
@@ -438,14 +623,6 @@ view model =
             [ h5 [ class "text-center" ] [text <| "Hello, " ++ user.fullName ++ "! (" ++ user.email ++ ")"]
             , div []
                 [ img [ class "rounded-pill", src user.imageUrl ] [] ]
-            -- , div []
-            --     [ text <| Debug.toString model.currencies ]
-            -- , div []
-            --     [ text <| Debug.toString model.intervals ]
-            -- , div []
-            --     [ text <| Debug.toString model.email ]
-            -- , div []
-            --     [ text <| Debug.toString model.subscriptions ]
             , div [ class "d-flex align-items-center" ]
                 [ div [ class "fw-bold" ] [ text "Currency:" ]
                 , select
@@ -476,10 +653,17 @@ view model =
                   [ span [ class "sr-only" ] [] ]
               else
                 div [] []
-            , div [ class "my-2" ]
-                [ button [ onClick InsertSubscription, class "btn btn-sm btn-primary" ]
-                    [ text "Insert" ]
+            , div [ class "d-flex my-2" ]
+                [ div [ class "mx-2" ]
+                    [ button [ onClick InsertSubscription, class "btn btn-sm btn-outline-primary" ]
+                      [ text "Insert" ]
+                    ]
+                , div [ class "mx-2" ]
+                    [ button [ onClick SaveEmailWithSubscriptions, class "btn btn-sm btn-primary" ]
+                      [ text "Save" ]
+                    ] 
                 ]
+            , div [ class "fst-italic fw-bold" ] [ text "*1 month = 28 days" ]
             , div [ class "my-2" ]
                 (List.indexedMap
                   (subscriptionCard model)
@@ -500,7 +684,6 @@ view model =
             ]
         _ ->
           div [] []
-    -- , div [ class "d-flex justify-content-center text-center bg-primary rounded fw-bold p-2 rounded-lg text-white" ] [ text <| Debug.toString model.user ]
     ]
 
 
@@ -509,17 +692,14 @@ view model =
 subscriptionCard : Model -> Int -> Subscription -> Html Msg
 subscriptionCard model i subscription =
   let
-    currencyId =
-      case model.email of
-        Just email ->
-          Maybe.withDefault 0 email.currencieId
-        
-        _ ->
-          0
+    foundInterval =
+      List.find 
+        (\interval -> Maybe.withDefault 0 interval.id == Maybe.withDefault 0 subscription.intervalId) 
+        model.intervals
 
     foundCurrency =
       List.find 
-        (\currency -> Maybe.withDefault 0 currency.id == currencyId) 
+        (\currency -> Maybe.withDefault 0 currency.id == Maybe.withDefault 0 subscription.currencieId) 
         model.currencies
 
     actualCurrencyName =
@@ -529,13 +709,60 @@ subscriptionCard model i subscription =
 
         _ ->
           ""
+
+    foundEmailCurrency =
+      List.find 
+        (\currency -> 
+          Maybe.withDefault 0 currency.id == 
+          case model.email of
+            Just email ->
+              Maybe.withDefault 0 email.currencieId
+            
+            _ ->
+              0
+        )
+        model.currencies
+
+    actualEmailCurrencyName =
+      case foundEmailCurrency of
+        Just currency ->
+          Maybe.withDefault "" currency.name
+
+        _ ->
+          ""
+        
+    actualIntervalName =
+      case foundInterval of
+        Just interval ->
+          Maybe.withDefault "" interval.name
+
+        _ ->
+          ""
+    
+    currencyIdString = String.fromInt <| Maybe.withDefault 0 subscription.currencieId
+  
+
+    finalConversionModifier =
+      getFinalConversionRate
+        model.currencies
+        model.email
+        subscription
+
+    finalSubscriptionPrice = 
+      getSubscriptionMonthlyPrice 
+        model.email
+        subscription
+        model.currencies
+        model.intervals
+        
+        
   in
   div
     [ class "card shadow p-3 d-flex align-items-center justify-content-center my-2" ]
     [ 
-      -- div [] [ text <| String.fromInt i ]
-    input 
-        [ class "form-control my-1" 
+      -- div [] [ text <| String.fromInt <| Maybe.withDefault 0 subscription.emailId ]
+      input 
+        [ class "form-control my-1 fw-bold" 
         , placeholder "Subscription name..."
         , value <| Maybe.withDefault "" subscription.name
         , onInput (InputSubscriptionName i) 
@@ -546,16 +773,36 @@ subscriptionCard model i subscription =
         [ div 
             [ class "fw-bold mx-1" ]
             [ text "For" ]
-        , div []
-            [ input 
+        , div 
+            [ style "width" "75" ]
+            [ input
                 [ class "mx-1 form-control form-control-sm"
                 , placeholder "Price..." 
                 , onInput (InputSubscriptionPrice i)
-                , value <| String.fromFloat (Maybe.withDefault 0  subscription.cost)
+                , value <| String.fromFloat (Maybe.withDefault 0 subscription.cost)
                 ] []
             ]
-        , div [ class "mx-1" ]
-            [ text actualCurrencyName ]
+        , div [ class "mx-2" ] [ text <| actualCurrencyName ]
+        , div []
+            [ select 
+                [ class "form-select mx-1 form-select-sm" 
+                , value currencyIdString 
+                , onInput 
+                    <| ChangeSubscriptionCurrencie i
+                ]
+                ([ option [ value "0" ] [ text "" ] ]
+                  ++
+                  ( List.map
+                    (\currency ->
+                      option
+                        [ value <| String.fromInt <| Maybe.withDefault 0 currency.id ]
+                        [ text <| Maybe.withDefault "" currency.name ]
+                    )
+                    model.currencies
+                  )
+                )
+            ]
+        
         ]
     , div
         [ class "d-flex flex-wrap justify-content-center align-items-center my-1" ]
@@ -563,20 +810,22 @@ subscriptionCard model i subscription =
             [ class "fw-bold flex-grow-1" ]
             [ text "Every" ]
         , div
-            [ class "mx-1" ]
+            [ class "mx-1", style "width" "75" ]
             [ input 
                 [ class "form-control form-control-sm"
                 , placeholder "Every..."
                 , type_ "number"
-                , value <| String.fromInt <| Maybe.withDefault 0 subscription.intervalAmount
+                , value <| String.fromInt <| Maybe.withDefault 1 subscription.intervalAmount
                 , onInput (InputSubscriptionIntervalAmount i)
                 ] 
                 [] 
             ]
+        , div [ class "mx-1" ] [ text actualIntervalName ]
         , div
             [ class "ml-1 flex-grow-1" ]
             [(select
               [ onInput (InputSubscriptionIntervalId i)
+              , value <| String.fromInt <| Maybe.withDefault 0 subscription.intervalId
               , class "form-select form-select-sm" 
               ]
               
@@ -591,6 +840,21 @@ subscriptionCard model i subscription =
               ))
             )]
         ]
+    -- , div [] 
+    --     [ text 
+    --         <| "Rate diff: " ++ 
+    --            String.fromFloat finalConversionModifier
+    --     ]
+    
+        , div [ class "text-primary fw-bold" ]
+            [ text <|
+                "Final/mo: " ++ 
+                format spanishLocale finalSubscriptionPrice ++
+                " " ++
+                actualEmailCurrencyName
+            ]
+        , div []
+            [ button [ class "btn btn-danger btn-sm", onClick (DeleteSubscription i subscription) ] [ text "Delete" ] ]
     ]
 
 subscriptions : Model -> Sub Msg
@@ -686,28 +950,90 @@ saveEmail : Model -> ( Model,  Cmd Msg )
 saveEmail model =
   ( model
   , Http.request
-    { method = "POST"
-    , headers = 
-        [ Http.header 
-            "authorization" 
-            (case model.user of
-              Just user ->
-                user.idToken 
-              
-              _ ->
-                ""
-            )
-        ]
-    , url = model.url ++ "/emails"
-    , body = case model.email of 
-        Just email ->
-          Http.jsonBody (emailEncoder email)
+          { method = "POST"
+          , headers = 
+              [ Http.header 
+                  "authorization" 
+                  (case model.user of
+                    Just user ->
+                      user.idToken 
+                    
+                    _ ->
+                      ""
+                  )
+              ]
+          , url 
+              = model.url 
+                ++ "/emails/save-bulk"
+          , body = Http.jsonBody (emailPostBodyEncoder (Maybe.withDefault initialEmail model.email) model.subscriptions model.deleteIds )
+          , expect = Http.expectJson GotEmail emailDecoder
+          , timeout = Nothing
+          , tracker = Nothing
+          }
+  )
+
+getSubscriptionMonthlyPrice : Maybe Email -> Subscription -> List Currencie -> List Interval -> Float
+getSubscriptionMonthlyPrice email subs currencies intervals =
+  let
+    subCost = Maybe.withDefault 0.0 subs.cost
+    intervalAmount = Maybe.withDefault 0 subs.intervalAmount
+    
+    foundInterval =
+      List.find
+      (\interval -> interval.id == subs.intervalId)
+      intervals
+
+    intervalModifier =
+      case foundInterval of
+        Just intervalRes ->
+          Maybe.withDefault 1.0 intervalRes.modifier
 
         _ ->
-          Http.emptyBody    
-    , expect = Http.expectJson GotEmail emailDecoder
-    , timeout = Nothing
-    , tracker = Nothing
-    }
-  )
-  
+          1.0
+
+    -- Currency code
+    finalConversionModifier = getFinalConversionRate currencies email subs
+     
+  in
+  subCost / (toFloat intervalAmount) * intervalModifier * finalConversionModifier
+
+getFinalConversionRate : List Currencie -> Maybe Email -> Subscription -> Float
+getFinalConversionRate currencies email subs =
+  let
+    foundSubscriptionCurrency =
+      List.find
+      (\currency -> currency.id == subs.currencieId)
+      currencies
+
+    foundSubscriptionCurrencyRate =
+      case foundSubscriptionCurrency of
+        Just subscriptionCurrency ->
+          Maybe.withDefault 0.0 subscriptionCurrency.rate
+
+        _ ->
+          0.0
+
+    foundUserCurrency =
+      List.find
+      (\currency -> 
+        Maybe.withDefault 0 currency.id == 
+        case email of
+          Just emailRes ->
+            Maybe.withDefault 0 emailRes.currencieId
+
+          _ ->
+            0      
+      )
+      currencies
+
+    foundUserCurrencyRate =
+      case foundUserCurrency of
+        Just userCurrency ->
+          Maybe.withDefault 0.0 userCurrency.rate
+
+        _ ->
+          0.0
+
+    finalConversionModifier = foundUserCurrencyRate / foundSubscriptionCurrencyRate
+  in
+  finalConversionModifier
