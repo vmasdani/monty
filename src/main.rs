@@ -17,6 +17,7 @@ pub mod postbody;
 pub mod schema;
 
 use actix_cors::Cors;
+use actix_files::Files;
 use actix_service::{Service, Transform};
 use actix_web::{App, Error, HttpResponse, HttpServer, Responder, Result, dev::{ServiceRequest, ServiceResponse}, error::{ErrorBadRequest, ErrorUnauthorized}, get, http::{self, ContentEncoding}, middleware, web};
 use chrono::{Datelike, NaiveDate, NaiveDateTime, Utc};
@@ -79,11 +80,13 @@ async fn main() {
 
     let mut DATABASE_URL = String::new();
     let mut FIXER_API_KEY = String::new();
+    let mut APP_PORT = String::new();
 
     for (key, value) in env::vars() {
         match key.as_str() {
             "DATABASE_URL" => DATABASE_URL = value,
             "FIXER_API_KEY" => FIXER_API_KEY = value,
+            "APP_PORT" => APP_PORT = value,
             _ => {
                 println!(".env variable irrelevant");
             }
@@ -123,7 +126,7 @@ async fn main() {
     let poll_db_pool_clone = pool.clone();
 
     tokio::join!(
-        run_http(actix_data_pool_clone),
+        run_http(actix_data_pool_clone, &APP_PORT),
         poll_db(poll_db_pool_clone, FIXER_API_KEY)
     );
 }
@@ -132,7 +135,7 @@ async fn my_async_fun() {
     tokio::time::delay_for(Duration::from_secs(1)).await;
 }
 
-async fn run_http(pool: Pool<ConnectionManager<SqliteConnection>>) -> () {
+async fn run_http(pool: Pool<ConnectionManager<SqliteConnection>>, app_port: &String) -> () {
     let local = LocalSet::new();
     let sys = actix_web::rt::System::run_in_tokio("server", &local);
 
@@ -141,51 +144,64 @@ async fn run_http(pool: Pool<ConnectionManager<SqliteConnection>>) -> () {
             .data(pool.clone())
             .wrap(middleware::Compress::new(ContentEncoding::Br))
             .wrap_fn(|req, srv| {
+                let path = req.path().to_string();
                 let auth_header = match req.headers().get("authorization") {
                     Some(auth) => Some(String::from(auth.to_str().unwrap_or(""))),
                     _ => None,
                 };
                 let fut = srv.call(req);
 
-                async move {
-                    let res: ServiceResponse<_> = fut.await?;
-                    // println!("{:?}", auth_header);
+                
+                    async move {
+                        let res: ServiceResponse<_> = fut.await?;
+                        // println!("{:?}", auth_header);
+    
+                        if path.eq("/") || path.eq("/currencies") || path.eq("/script.js") || path.eq("/main.js") {
+                            println!("Pass! {}", path);
 
-                    match auth_header {
-                        Some(auth) => {
-                            // println!("Auth header: {:?}", auth);
-
-                            let url = format!(
-                                "https://oauth2.googleapis.com/tokeninfo?id_token={}",
-                                auth
-                            );
-
-                            let resp = reqwest::get(url.as_str()).await;
-
-                            let authorized = match resp {
-                                Ok(resp_res) => {
-                                    if resp_res.status() == StatusCode::OK {
-                                        true
+                            Ok(res)
+                        } else {
+                            match auth_header {
+                                Some(auth) => {
+                                    // println!("Auth header: {:?}", auth);
+        
+                                    let url = format!(
+                                        "https://oauth2.googleapis.com/tokeninfo?id_token={}",
+                                        auth
+                                    );
+        
+                                    let resp = reqwest::get(url.as_str()).await;
+        
+                                    let authorized = match resp {
+                                        Ok(resp_res) => {
+                                            if resp_res.status() == StatusCode::OK {
+                                                true
+                                            } else {
+                                                println!("Token invalid! {}", resp_res.status());
+                                                false
+                                            }
+                                        }
+                                        _ => {
+                                            println!("Unauthorized!");
+                                            false
+                                        }
+                                    };
+        
+                                    if authorized {
+                                        Ok(res)
                                     } else {
-                                        println!("Token invalid! {}", resp_res.status());
-                                        false
+                                        Err(ErrorUnauthorized("Unauthorized!"))
                                     }
                                 }
-                                _ => {
-                                    println!("Unauthorized!");
-                                    false
-                                }
-                            };
-
-                            if authorized {
-                                Ok(res)
-                            } else {
-                                Err(ErrorUnauthorized("Unauthorized!"))
+                                _ => Err(ErrorBadRequest("No auth header present!")),
                             }
                         }
-                        _ => Err(ErrorBadRequest("No auth header present!")),
+
+                        
                     }
-                }
+                
+
+                
             })
             .wrap(
                 Cors::default()
@@ -197,7 +213,7 @@ async fn run_http(pool: Pool<ConnectionManager<SqliteConnection>>) -> () {
                     //     .allowed_header(http::header::CONTENT_TYPE)
                     .max_age(3600),
             )
-            .service(home)
+            // .service(home)
             // Logins
             .service(google_login_verify)
             // Emails
@@ -217,10 +233,11 @@ async fn run_http(pool: Pool<ConnectionManager<SqliteConnection>>) -> () {
             .service(get_currencies)
             // Intervals
             .service(get_intervals)
+            .service(Files::new("/", "./frontend").index_file("index.html"))
         // .route("/", web::get().to(home))
         // .route("/{name}", web::get().to(index))
     })
-    .bind("127.0.0.1:8080");
+    .bind(format!("127.0.0.1:{}", app_port.as_str()));
 
     match server {
         Ok(srv) => {

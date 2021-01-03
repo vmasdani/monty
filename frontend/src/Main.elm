@@ -367,7 +367,14 @@ update msg model =
 
     InsertSubscription ->
       let
-        newSubscriptions = 
+        foundInterval =
+          List.find
+          (\interval ->
+            interval.name == Just "Month"
+          )
+          model.intervals
+
+        newSubscriptions =
           model.subscriptions 
           ++  [ { initialSubscription 
                 | currencieId =
@@ -382,6 +389,13 @@ update msg model =
                       Just email ->
                         email.id
 
+                      _ ->
+                        Nothing
+                , intervalId =
+                    case foundInterval of
+                      Just interval ->
+                        interval.id
+                      
                       _ ->
                         Nothing
                 } 
@@ -637,8 +651,7 @@ view model =
                             "0"
                         )
                     ]
-                    ( [ option [] [ text "" ] ]
-                      ++
+                    ( 
                       (List.map 
                         (\currency -> 
                           option 
@@ -680,6 +693,15 @@ view model =
                 , h3 
                     [ class "text-success" ] 
                     [ text <| format spanishLocale (monthlyPrice * 12) ++ " " ++ actualCurrencyName ++ " annualy" ]
+                ]
+            , div [ class "d-flex flex-column justify-content-center align-items-center " ]
+                [ div 
+                    [ class "fst-italic fw-bold" ] 
+                    [ text "Made with the "
+                    , a [ href "https://github.com/vmasdani/argems-stack", target "_blank" ]
+                        [ text "ARGEMS" ]
+                    , text " stack"
+                    ]
                 ]
             ]
         _ ->
@@ -790,8 +812,7 @@ subscriptionCard model i subscription =
                 , onInput 
                     <| ChangeSubscriptionCurrencie i
                 ]
-                ([ option [ value "0" ] [ text "" ] ]
-                  ++
+                (
                   ( List.map
                     (\currency ->
                       option
@@ -829,7 +850,7 @@ subscriptionCard model i subscription =
               , class "form-select form-select-sm" 
               ]
               
-              ( [ option [ value "" ] [ text "" ] ] ++
+              ( 
               (List.map
                 (\interval -> 
                   option 
