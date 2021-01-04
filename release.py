@@ -55,7 +55,7 @@ index_html_contents = """<html>
 steps = [
     ("mkdir -p dist/frontend", "."),
     ("cargo build --release", "."),
-    ("cp target/release/monty .env dist", "."),
+    ("cp target/release/monty .env diesel.png dist", "."),
     ("./build.sh", "./frontend"),
     ("cp dist/* ../dist/frontend", "./frontend"),
 ]

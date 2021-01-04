@@ -156,7 +156,11 @@ async fn run_http(pool: Pool<ConnectionManager<SqliteConnection>>, app_port: &St
                         let res: ServiceResponse<_> = fut.await?;
                         // println!("{:?}", auth_header);
     
-                        if path.eq("/") || path.eq("/currencies") || path.eq("/script.js") || path.eq("/main.js") {
+                        if path.eq("/") 
+                        || path.eq("/currencies") 
+                        || path.eq("/script.js") 
+                        || path.eq("/main.js") 
+                        || path.eq("/diesel.png") {
                             println!("Pass! {}", path);
 
                             Ok(res)

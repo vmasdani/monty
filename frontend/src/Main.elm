@@ -14,6 +14,8 @@ import FormatNumber.Locales exposing (spanishLocale, usLocale)
 import Array
 import String
 import Maybe
+import Iso8601
+import Time
 
 port loggedIn : (UserInfo -> msg) -> Sub msg
 port signedOut : (() -> msg) -> Sub msg
@@ -197,6 +199,7 @@ type alias Currencie =
   , name: Maybe String
   , createdAt: Maybe String
   , updatedAt: Maybe String
+  , lastUpdateDay: Maybe String
   , rate: Maybe Float
   }
 
@@ -207,6 +210,7 @@ currencieDecoder =
     |> Pipeline.required "name" (Decode.maybe Decode.string)
     |> Pipeline.required "created_at" (Decode.maybe Decode.string)
     |> Pipeline.required "updated_at" (Decode.maybe Decode.string)
+    |> Pipeline.required "last_update_day" (Decode.maybe Decode.string)
     |> Pipeline.required "rate" (Decode.maybe Decode.float)
 
 type alias UserInfo =
@@ -611,6 +615,19 @@ view model =
         )
         0.0
         model.subscriptions
+
+    lastCurrencyUpdated =
+      (List.foldl
+        (\currency acc ->
+          Maybe.withDefault "" (currency.lastUpdateDay)
+        )
+        ""
+        model.currencies)
+      
+      ++ "Z"
+
+    lastCurrencyUpdatedPosix =
+      Iso8601.toTime <| lastCurrencyUpdated
   in
   div
     [ class "container bg-light shadow p-2 d-flex align-items-center flex-column justify-content-center"
@@ -661,7 +678,34 @@ view model =
                         model.currencies
                       ))
                 ]
-            , if model.requestStatus == Loading then
+            -- , div [] [ text <| "Last update: " ++ lastCurrencyUpdated ]
+            -- , div [] 
+            --     [ text 
+            --         <| "Last update: " 
+            --               ++ case (Iso8601.toTime lastCurrencyUpdated) of
+            --                   Ok parsedDate ->
+            --                     Iso8601.fromTime parsedDate
+
+            --                   _ ->
+            --                     "Failed parsing date"
+            --     ]
+            , case lastCurrencyUpdatedPosix of
+                Ok timePosix -> 
+                  div [ class "fw-bold fst-italic my-2 text-success" ]
+                    [ text 
+                        <|  "Last update: "
+                              ++ String.fromInt (Time.toDay Time.utc timePosix)
+                              ++ " "
+                              ++ monthToString (Time.toMonth Time.utc timePosix)
+                              ++ " "
+                              ++ String.fromInt (Time.toYear Time.utc timePosix) 
+                              
+                    ]
+            
+                _ ->
+                  div [] []
+            , div [ class "fst-italic fw-bold" ] [ text "*1 month = 28 days" ]
+            , if model.requestStatus == Loading then 
                 div [ class "spinner-border", attribute "role" "status" ] 
                   [ span [ class "sr-only" ] [] ]
               else
@@ -676,7 +720,6 @@ view model =
                       [ text "Save" ]
                     ] 
                 ]
-            , div [ class "fst-italic fw-bold" ] [ text "*1 month = 28 days" ]
             , div [ class "my-2" ]
                 (List.indexedMap
                   (subscriptionCard model)
@@ -694,14 +737,21 @@ view model =
                     [ class "text-success" ] 
                     [ text <| format spanishLocale (monthlyPrice * 12) ++ " " ++ actualCurrencyName ++ " annualy" ]
                 ]
-            , div [ class "d-flex flex-column justify-content-center align-items-center " ]
-                [ div 
+            , hr [ class "border border-secondary text-secondary shadow w-100" ] [ ]
+            , div [ class "d-flex flex-column justify-content-center align-items-center" ]
+                [ div
                     [ class "fst-italic fw-bold" ] 
                     [ text "Made with the "
                     , a [ href "https://github.com/vmasdani/argems-stack", target "_blank" ]
                         [ text "ARGEMS" ]
                     , text " stack"
                     ]
+                ]
+            , div [ class "fw-bold fst-italic" ]
+                [ text "Buy me diesel "
+                , img [ src "/diesel.png", style "width" "25" ] []
+                , text " on "
+                , a [ href "https://trakteer.id/vmasdani" ] [ text "Trakteer!" ]                
                 ]
             ]
         _ ->
@@ -1058,3 +1108,19 @@ getFinalConversionRate currencies email subs =
     finalConversionModifier = foundUserCurrencyRate / foundSubscriptionCurrencyRate
   in
   finalConversionModifier
+
+monthToString month =
+  case month of
+    Time.Jan -> "Jan"
+    Time.Feb -> "Feb"
+    Time.Mar -> "Mar"
+    Time.Apr -> "Apr"
+    Time.May -> "May"
+    Time.Jun -> "Jun"
+    Time.Jul -> "Jul"
+    Time.Aug -> "Aug"
+    Time.Sep -> "Sep"
+    Time.Oct -> "Oct"
+    Time.Nov -> "Nov"
+    Time.Dec -> "Dec"
+    
