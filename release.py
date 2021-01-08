@@ -5,7 +5,7 @@ import sys
 import json
 
 # Read release.json
-release = open('release.json')
+release = open('env.json')
 release_contents = json.loads(release.read())
 
 release.close()

@@ -209,7 +209,7 @@ async fn post_email_save_bulk(
     match pool.get() {
         Ok(conn) => {
             let res = web::block(move || {
-                // Save email 
+                // Save email
                 {
                     use crate::schema::emails::dsl::*;
                     diesel::replace_into(emails)
@@ -220,26 +220,45 @@ async fn post_email_save_bulk(
                 // Save subscriptions
                 {
                     use crate::schema::subscriptions::dsl::*;
-                    
+
                     email_body.subscriptions.iter().for_each(|subscription| {
                         println!("{:?}", subscription);
 
-                        diesel::replace_into(subscriptions)
-                        .values(subscription)
-                        .execute(&conn);
+                        // Check subscriptions with email id
+                        let subs_count: Result<Vec<Subscription>, _> = subscriptions
+                            .filter(email_id.eq(email_body.email.id))
+                            .load::<Subscription>(&conn);
+
+                        match subs_count {
+                            Ok(subs) => {
+                                println!("Subs count: {}", subs.len());
+
+                                if subs.len() <= 100 {
+                                    diesel::replace_into(subscriptions)
+                                        .values(subscription)
+                                        .execute(&conn);
+                                }
+                            }
+                            _ => {
+                                println!("Error gettting subs");
+                            }
+                        }
                     });
                 }
 
                 // Delete unwanted subscriptions
                 {
                     use crate::schema::subscriptions::dsl::*;
-                    
-                    email_body.subscription_delete_ids.iter().for_each(|subscription_id| {
-                        println!("Delete IDs: {:?}", subscription_id);
 
-                        diesel::delete(subscriptions.filter(id.eq(subscription_id)))
-                        .execute(&conn);
-                    });
+                    email_body
+                        .subscription_delete_ids
+                        .iter()
+                        .for_each(|subscription_id| {
+                            println!("Delete IDs: {:?}", subscription_id);
+
+                            diesel::delete(subscriptions.filter(id.eq(subscription_id)))
+                                .execute(&conn);
+                        });
                 }
 
                 // Get last saved email

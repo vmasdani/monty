@@ -265,6 +265,11 @@ main =
     
 -- MODEL
 
+type Modification
+  = NotModified
+  | Unsaved
+  | Saved
+
 type alias Model = 
   { currentTime : Int
   , url : String
@@ -275,6 +280,7 @@ type alias Model =
   , email : Maybe Email
   , requestStatus: RequestStatus
   , deleteIds : List Int
+  , modified : Modification
   }
 
 
@@ -292,6 +298,7 @@ init flags =
       , email = Nothing
       , requestStatus = NotAsked
       , deleteIds = []
+      , modified = NotModified
       }
   in
   ( initialModel
@@ -405,12 +412,20 @@ update msg model =
                 } 
               ]  
       in
-      ( { model | subscriptions = newSubscriptions }, Cmd.none )
+      if List.length model.subscriptions >= 100 then
+        ( model, Cmd.none )
+      else
+        ( { model | subscriptions = newSubscriptions, modified = Unsaved }, Cmd.none )
 
     GotEmail res ->
       case res of
         Ok email -> 
-          fetchEmailSubscriptions { model | email = Just email }
+          fetchEmailSubscriptions 
+            { model 
+            | email = Just email
+            , modified = 
+                if model.modified == Unsaved then Saved else model.modified 
+            }
 
         _ ->
           ( model, Cmd.none  )
@@ -435,7 +450,7 @@ update msg model =
             )
           model.subscriptions
       in
-      ( { model | subscriptions = newSubscriptions }, Cmd.none )
+      ( { model | subscriptions = newSubscriptions, modified = Unsaved }, Cmd.none )
       
     InputSubscriptionPrice i priceString ->
       let
@@ -456,7 +471,7 @@ update msg model =
             )
           model.subscriptions
       in
-      ( { model | subscriptions = newSubscriptions }, Cmd.none )
+      ( { model | subscriptions = newSubscriptions, modified = Unsaved }, Cmd.none )
       
     InputSubscriptionIntervalAmount i amountString ->
       let
@@ -477,7 +492,7 @@ update msg model =
             )
             model.subscriptions
       in
-      ( { model | subscriptions = newSubscriptions }, Cmd.none )
+      ( { model | subscriptions = newSubscriptions, modified = Unsaved }, Cmd.none )
       
     InputSubscriptionIntervalId i intervalIdString ->
       let
@@ -491,7 +506,7 @@ update msg model =
             )
             model.subscriptions
       in
-      ( { model | subscriptions = newSubscriptions }, Cmd.none )
+      ( { model | subscriptions = newSubscriptions, modified = Unsaved }, Cmd.none )
 
     PostedSubscription res ->
       case res of
@@ -720,6 +735,25 @@ view model =
                       [ text "Save" ]
                     ] 
                 ]
+            , div []
+                [ case model.modified of 
+                    NotModified -> div [] []
+                    Unsaved -> div [ class "text-danger" ] [ text "Progress unsaved" ]
+                    Saved -> div [ class "text-success" ] [ text "Saved!" ]
+                ]
+            , let
+                subscriptionsLength = (List.length model.subscriptions)
+              in
+              div [  ]
+                [ div 
+                    [ class "fw-bold" 
+                    , if subscriptionsLength > 100 then
+                        class "text-danger"
+                      else
+                        class ""
+                    ] 
+                    [ text <| String.fromInt subscriptionsLength ++  "/100" ]
+                ]
             , div [ class "my-2" ]
                 (List.indexedMap
                   (subscriptionCard model)
@@ -751,7 +785,12 @@ view model =
                 [ text "Buy me diesel "
                 , img [ src "/diesel.png", style "width" "25" ] []
                 , text " on "
-                , a [ href "https://trakteer.id/vmasdani" ] [ text "Trakteer!" ]                
+                , a [ href "https://trakteer.id/vmasdani", target "_blank" ] [ text "Trakteer!" ]                
+                ]
+            , div [ class "fw-bold fst-italic" ]
+                [ text "Or donate to my "
+                , a [ href "https://paypal.me/vmasdani", target "_blank" ]
+                    [ img [ src "/paypal.webp", style "width" "50" ] [] ]
                 ]
             ]
         _ ->

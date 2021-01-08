@@ -28,20 +28,11 @@ use diesel::{
 };
 use diesel_migrations::embed_migrations;
 use dotenv::dotenv;
-use futures::{
-    future::{ok, Either, FutureExt, Ready},
-    Future,
-};
+use futures::{Future, future::{ok, Either, FutureExt, Ready}};
 use http::StatusCode;
 use model::{Currencie, Email};
 use serde_json::Value;
-use std::{
-    env, io,
-    pin::Pin,
-    sync::Arc,
-    task::{Context, Poll},
-    time::Duration,
-};
+use std::{env, fs::File, io::{self, BufReader, Read}, pin::Pin, sync::Arc, task::{Context, Poll}, time::Duration};
 use tokio::{sync::Mutex, task::LocalSet};
 
 type DbPool = diesel::r2d2::Pool<ConnectionManager<SqliteConnection>>;
@@ -82,16 +73,52 @@ async fn main() {
     let mut FIXER_API_KEY = String::new();
     let mut APP_PORT = String::new();
 
+    // Parse env.json
+    match File::open("env.json") {
+        Ok(contents) => {
+            let mut json_str = String::new();
+
+            BufReader::new(contents).read_to_string(&mut json_str);
+
+            println!("env.json contents:");
+            println!("{}", json_str);
+
+            match serde_json::from_str(&json_str) as Result<Value, _> {
+                Ok(val) => {
+                    FIXER_API_KEY = match val["fixer_api_key"].as_str() {
+                        Some(fixer_api_key) => fixer_api_key.to_string(),
+                        _ => FIXER_API_KEY
+                    };
+                    APP_PORT = match val["server_port"].as_str() {
+                        Some(server_port) => server_port.to_string(),
+                        _ => APP_PORT
+                    };
+                },
+                _ => {
+                    println!("Error parsing env.json")
+                }
+            }
+
+            
+        },
+        _ => {
+            println!("Error opening env.json!");
+        }
+    }
+
+    // Parse .env
     for (key, value) in env::vars() {
         match key.as_str() {
             "DATABASE_URL" => DATABASE_URL = value,
-            "FIXER_API_KEY" => FIXER_API_KEY = value,
-            "APP_PORT" => APP_PORT = value,
             _ => {
                 println!(".env variable irrelevant");
             }
         }
     }
+
+    println!("db url: {}", DATABASE_URL);
+    println!("fixer api key: {}", FIXER_API_KEY);
+    println!("server port: {}", APP_PORT);
 
     let manager = ConnectionManager::<SqliteConnection>::new(DATABASE_URL);
     let pool = diesel::r2d2::Pool::builder()
@@ -160,7 +187,8 @@ async fn run_http(pool: Pool<ConnectionManager<SqliteConnection>>, app_port: &St
                         || path.eq("/currencies") 
                         || path.eq("/script.js") 
                         || path.eq("/main.js") 
-                        || path.eq("/diesel.png") {
+                        || path.eq("/diesel.png")
+                        || path.eq("/paypal.webp") {
                             println!("Pass! {}", path);
 
                             Ok(res)
