@@ -6,9 +6,7 @@ A software for calculating monthly/annual subscription cost. Made in SQLite Rust
 
 .env file needed: 
 ```
-APP_PORT=<your port, example 8085>
 DATABASE_URL=<your database name>.sqlite3
-FIXER_API_KEY=<your fixer api key>
 ```
 
 ### Running (Backend): 
