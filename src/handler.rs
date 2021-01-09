@@ -261,10 +261,10 @@ async fn post_email_save_bulk(
                         });
                 }
 
-                // Get last saved email
+                // Get saved email
                 {
                     use crate::schema::emails::dsl::*;
-                    emails.order(id.desc()).first::<Email>(&conn)
+                    emails.filter(id.eq(email_body.email.id)).first::<Email>(&conn)
                 }
             })
             .await;
