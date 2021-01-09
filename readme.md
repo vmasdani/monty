@@ -1,7 +1,5 @@
 # Monty
 
-## (WIP)
-
 A software for calculating monthly/annual subscription cost. Made in SQLite Rust (Actix + Diesel) and Elm.
 
 .env file needed: 
