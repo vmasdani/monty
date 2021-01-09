@@ -9,4 +9,4 @@ echo "Gzipped size: $(cat main.js | gzip -c | wc -c) bytes" &&\
 
 rm -rf main-unoptimised.js &&\
 mkdir -p dist &&\
-cp index.html main.js script.js diesel.png dist
+cp index.html main.js script.js dist

@@ -22,7 +22,8 @@ cd frontend
 
 ### Release
 1. Install [Node.JS](https://nodejs.org/en/download/) and `uglify-js` `(npm i -g uglify-js)`, Need Python 3 too.
-2. Add `env.json` with contents:
+2. Install [Docker](https://docs.docker.com/engine/install/) and [rust-musl-builder](https://github.com/emk/rust-musl-builder)
+3. Add `env.json` with contents:
 ```
 {
     "base_url": "http://localhost:8085",
@@ -30,7 +31,7 @@ cd frontend
     "server_port": "your_server_port",
 }
 ```
-3. Run
+4. Run
 ```
 ./release.py
 ```

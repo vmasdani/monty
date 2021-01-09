@@ -52,12 +52,14 @@ index_html_contents = """<html>
 </html>
 """.format(base_url)
 
+rust_musl_builder_cmd = 'docker run --rm -it -v "$(pwd)":/home/rust/src ekidd/rust-musl-builder'
+
 steps = [
     ("mkdir -p dist/frontend", "."),
-    ("cargo build --release", "."),
-    ("cp target/release/monty .env diesel.png dist", "."),
+    ("{} cargo build --release".format(rust_musl_builder_cmd), "."),
+    ("cp target/x86_64-unknown-linux-musl/release/monty .env dist", "."),
     ("./build.sh", "./frontend"),
-    ("cp dist/* ../dist/frontend", "./frontend"),
+    ("cp dist/* diesel.png paypal.webp ../dist/frontend", "./frontend"),
 ]
 
 for (cmd, cwd) in steps:

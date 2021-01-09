@@ -11,6 +11,7 @@ actix-web = "3"
 reqwest = { version = "0.10", features = ["json"] }
 tokio = { version = "0.2", features = ["full"] }
 diesel = { version = "1.4.4", features = ["sqlite", "r2d2", "chrono"] }
+libsqlite3-sys = { version = "*", features = ["bundled"] }
 tokio-diesel = "0.3.0"
 diesel_migrations = "1.4.0"
 serde = "1.0.118"
