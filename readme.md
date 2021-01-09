@@ -1,6 +1,6 @@
 # Monty
 
-A software for calculating monthly/annual subscription cost. Made in SQLite Rust (Actix + Diesel) and Elm.
+A software for calculating monthly/annual subscription cost. Made in SQLite Rust (Actix + Diesel) and Elm. See [ARGEMS stack](https://github.com/vmasdani/argems-stack) and [ARGEMS Rust starter](https://github.com/vmasdani/argems-rust-starter)
 
 .env file needed: 
 ```
