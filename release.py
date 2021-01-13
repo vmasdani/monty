@@ -56,8 +56,8 @@ rust_musl_builder_cmd = 'docker run --rm -it -v "$(pwd)":/home/rust/src ekidd/ru
 
 steps = [
     ("mkdir -p dist/frontend", "."),
-    ("{} cargo build --release".format(rust_musl_builder_cmd), "."),
-    ("cp target/x86_64-unknown-linux-musl/release/monty .env dist", "."),
+    ("cross build --release --target x86_64-unknown-linux-musl", "."),
+    ("cp target/x86_64-unknown-linux-musl/release/monty env.json .env dist", "."),
     ("./build.sh", "./frontend"),
     ("cp dist/* diesel.png paypal.webp ../dist/frontend", "./frontend"),
 ]
